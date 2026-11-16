@@ -1,0 +1,105 @@
+<div class="login-screen" id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">
+      <img src="{{LOGO}}" alt="Grupo Login Serv" class="login-logo-img">
+    </div>
+    <div class="login-title">Login Frota</div>
+    <div class="login-subtitle">Entre com seu usuário e senha</div>
+    <div class="login-demo">Modo demonstração: o Firebase ainda não foi configurado. Use seu usuário e a senha <b>demo</b>. Os dados ficam só neste navegador.</div>
+    <div class="login-error" id="login-error">Usuário ou senha inválidos.</div>
+    <form id="login-form">
+      <div class="login-field">
+        <label for="login-user">Usuário</label>
+        <input type="text" id="login-user" placeholder="Seu nome..." autocomplete="username" required>
+      </div>
+      <div class="login-field">
+        <label for="login-pass">Senha</label>
+        <input type="password" id="login-pass" placeholder="••••••••" autocomplete="current-password" required>
+      </div>
+      <button type="submit" class="login-btn">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/></svg>
+        Entrar
+      </button>
+    </form>
+  </div>
+</div>
+
+<div class="shell" id="app-shell">
+  <aside class="sidebar" id="app-sidebar">
+    <div class="brand"><img src="{{LOGO}}" alt="Grupo Login Serv" class="brand-logo-img"></div>
+    <button class="sidebar-toggle" id="sidebar-toggle-btn" title="Recolher menu">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg>
+      <span class="nav-label">Recolher</span>
+    </button>
+    <nav class="nav" id="nav">
+      <div class="nav-item active" data-mod="inicio">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+        <span class="nav-label">Início</span><span class="nav-badge" id="badge-inicio"></span>
+      </div>
+      <div class="nav-item" data-mod="rastreamento">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>
+        <span class="nav-label">Rastreamento</span><span class="nav-badge" id="badge-rastreamento"></span>
+      </div>
+      <div class="nav-item" data-mod="combustivel">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 21V5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v16M3 21h13M7 8h5"/><path d="M15 11h2a2 2 0 0 1 2 2v4a1.5 1.5 0 0 0 3 0V9l-3-3"/></svg>
+        <span class="nav-label">Combustível</span><span class="nav-badge" id="badge-combustivel"></span>
+      </div>
+      <div class="nav-item" data-mod="manutencao">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-.6-.6-2.4z"/></svg>
+        <span class="nav-label">Manutenções</span><span class="nav-badge" id="badge-manutencao"></span>
+      </div>
+      <div class="nav-item" data-mod="pedagios">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 9V6a1 1 0 0 1 1-1h16a1 1 0 0 1 1 1v3a3 3 0 0 0 0 6v3a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-3a3 3 0 0 0 0-6z"/><path d="M14 5v14" stroke-dasharray="2 2"/></svg>
+        <span class="nav-label">Pedágios</span><span class="nav-badge" id="badge-pedagios"></span>
+      </div>
+      <div class="nav-item" data-mod="visitas">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 21V4M5 4h11l-2 4 2 4H5"/></svg>
+        <span class="nav-label">Visitas a postos</span><span class="nav-badge" id="badge-visitas"></span>
+      </div>
+      <div class="nav-item" data-mod="relatorios">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 17v-3M12 17v-6M16 17v-2"/></svg>
+        <span class="nav-label">Relatórios</span><span class="nav-badge" id="badge-relatorios"></span>
+      </div>
+      <div class="nav-item" data-mod="cadastros">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 17h2l1.5-5h11L19 17h2v3h-2.3a2.5 2.5 0 0 1-4.6 0H9.9a2.5 2.5 0 0 1-4.6 0H3z"/><path d="M7 12l1.2-4h7.6L17 12"/></svg>
+        <span class="nav-label">Cadastros</span><span class="nav-badge" id="badge-cadastros"></span>
+      </div>
+    </nav>
+    <div class="sidebar-foot">
+      <div class="sync-pill" id="sync-pill" style="margin-bottom:12px;justify-content:center;">
+        <span class="sync-dot"></span><span id="sync-label">Conectando...</span>
+      </div>
+      <div class="user-row">
+        <div class="avatar" id="role-avatar">—</div>
+        <div><div class="user-name" id="role-name">—</div><span class="role-pill" id="role-pill-label">—</span></div>
+      </div>
+      <button class="btn btn-ghost btn-block" id="btn-logout">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
+        <span class="nav-label">Sair</span>
+      </button>
+      <div style="text-align:center;font-size:9px;color:var(--text-faint);margin-top:8px;opacity:0.6;">build {{BUILD}}</div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar"><div class="page-title" id="mod-title">Início</div><div class="page-date page-date-js"></div></div>
+    <div class="subnav" id="subnav"></div>
+    <div class="demo-banner">Modo demonstração: os dados estão salvos só neste navegador. Configure o Firebase para usar com a equipe.</div>
+    <div class="toolbar" id="filters">
+      <select class="tb-select" id="f-period">
+        <option value="mes">Este mês</option>
+        <option value="30d" selected>Últimos 30 dias</option>
+        <option value="90d">Últimos 90 dias</option>
+        <option value="ano">Este ano</option>
+        <option value="tudo">Todo o período</option>
+      </select>
+      <select class="tb-select" id="f-veic"></select>
+      <span class="spacer"></span>
+      <span id="view-actions" style="display:flex;gap:10px;flex-wrap:wrap"></span>
+    </div>
+    <div id="view"></div>
+  </main>
+</div>
+
+<div class="modal-overlay" id="modal"><div class="modal-box" id="modal-box"></div></div>
+<div class="toast" id="toast"></div>

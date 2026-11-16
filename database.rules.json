@@ -1,0 +1,15 @@
+{
+  "rules": {
+    "painel-frota": {
+      ".read": "auth != null && auth.token.email.matches(/.*@loginserv\\.com\\.br$/)",
+      ".write": "auth != null && auth.token.email.matches(/.*@loginserv\\.com\\.br$/)",
+      "abastecimentos": { ".indexOn": ["data", "veiculoId"] },
+      "manutencoes": { ".indexOn": ["data", "veiculoId"] },
+      "pedagios": { ".indexOn": ["data", "veiculoId"] },
+      "viagens": { ".indexOn": ["inicio", "veiculoId"] },
+      "visitas": { ".indexOn": ["chegada", "postoId"] },
+      "leituras": { ".indexOn": ["data", "veiculoId"] },
+      "logs": { ".indexOn": ["ts"] }
+    }
+  }
+}

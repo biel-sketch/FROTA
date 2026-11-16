@@ -1,0 +1,33 @@
+name: Sincronizar AgileSat
+
+on:
+  schedule:
+    # De hora em hora (minuto 17, para fugir do pico do GitHub)
+    - cron: '17 * * * *'
+  workflow_dispatch: {}   # permite rodar manualmente pela aba Actions
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    env:
+      TZ: America/Sao_Paulo
+    steps:
+      - name: Checkout do repositório
+        uses: actions/checkout@v4
+
+      - name: Preparar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Instalar dependências
+        run: pip install requests google-auth
+
+      - name: Ler a AgileSat e gravar no Firebase
+        env:
+          FIREBASE_DATABASE_URL: ${{ secrets.FIREBASE_DATABASE_URL }}
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          AGILESAT_TOKEN: ${{ secrets.AGILESAT_TOKEN }}
+          AGILESAT_USUARIO: ${{ secrets.AGILESAT_USUARIO }}
+          AGILESAT_SENHA: ${{ secrets.AGILESAT_SENHA }}
+        run: python tools/agilesat_sync.py
