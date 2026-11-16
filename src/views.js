@@ -201,6 +201,8 @@ function alertas(){
   var exc = {}; c.vg.forEach(function(t){ if(num(t.velMax) > lim) exc[t.veiculoId] = (exc[t.veiculoId] || 0) + 1; });
   Object.keys(exc).forEach(function(id){ add('amber', 'vel', placaDe(id) + ': ' + exc[id] + ' viagem(ns) acima de ' + lim + ' km/h', 'Veja em Rastreamento › Viagens'); });
   aderencia().forEach(function(a){ if(a.pct != null && a.pct < 80) add(a.pct < 50 ? 'red' : 'amber', 'visita', a.p.nome + ': ' + fmtN(a.pct) + '% das visitas', a.n + ' de ' + fmtN(a.esperado) + ' esperadas no período'); });
+  var us = cfg('ultimaSync', null);
+  if(us && us.erro) add('amber', 'sync', 'Sincronização com a AgileSat falhou', fmtDT(us.erroEm) + ' · veja em Cadastros › Integração');
   var ord = {red:0, amber:1, teal:2}; A.sort(function(a, b){ return ord[a.sev] - ord[b.sev]; });
   return A;
 }

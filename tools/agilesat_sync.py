@@ -398,7 +398,7 @@ def gravar_firebase(fb, veiculos, posicoes, viagens):
         paths[f"visitas/{k}"] = v
     agora = int(datetime.now().timestamp() * 1000)
     resumo = f"{len(veiculos)} veículos ({novos} novos), {np} posições, {len(novas_viagens)} viagens, {len(visitas)} visitas"
-    paths["config/ultimaSync"] = {"em": agora, "resumo": resumo, "origem": "GitHub Actions"}
+    paths["config/ultimaSync"] = {"em": agora, "resumo": resumo, "origem": "GitHub Actions"}  # substitui e limpa erro anterior
     paths[f"logs/{nova_chave()}"] = {"ts": agora, "usuario": "Sincronização AgileSat", "acao": "Sincronizou o rastreador", "detalhe": resumo}
     fb.update(paths)
     print("OK:", resumo)
@@ -441,5 +441,30 @@ def main():
     print("Importe esse arquivo no painel: Cadastros > Integração AgileSat.")
 
 
+def registrar_erro(msg):
+    """Grava o erro em config/ultimaSync para aparecer no painel (Cadastros > Integração)."""
+    try:
+        if os.environ.get("FIREBASE_SERVICE_ACCOUNT") and os.environ.get("FIREBASE_DATABASE_URL"):
+            fb = Firebase(os.environ["FIREBASE_DATABASE_URL"], os.environ["FIREBASE_SERVICE_ACCOUNT"])
+            fb.update({"config/ultimaSync/erro": str(msg)[:300], "config/ultimaSync/erroEm": int(datetime.now().timestamp() * 1000)})
+    except Exception as e2:
+        print("não consegui registrar o erro no painel:", e2)
+
+
 if __name__ == "__main__":
-    main()
+    # Em modo automático (GitHub Actions) o script nunca termina com erro,
+    # para o GitHub não mandar e-mail de falha. O problema aparece no painel.
+    automatico = os.environ.get("GITHUB_ACTIONS") == "true"
+    try:
+        main()
+    except SystemExit as e:
+        if automatico and e.code not in (None, 0):
+            print("Aviso:", e.code)
+            registrar_erro(e.code)
+        elif not automatico:
+            raise
+    except Exception as e:
+        print("Erro na sincronização:", repr(e))
+        if not automatico:
+            raise
+        registrar_erro(repr(e))

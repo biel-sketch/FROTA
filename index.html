@@ -404,7 +404,7 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
         <span class="nav-label">Sair</span>
       </button>
-      <div style="text-align:center;font-size:9px;color:var(--text-faint);margin-top:8px;opacity:0.6;">build 2026-11-16-1624</div>
+      <div style="text-align:center;font-size:9px;color:var(--text-faint);margin-top:8px;opacity:0.6;">build 2026-11-16-1637</div>
     </div>
   </aside>
 
@@ -857,6 +857,8 @@ function alertas(){
   var exc = {}; c.vg.forEach(function(t){ if(num(t.velMax) > lim) exc[t.veiculoId] = (exc[t.veiculoId] || 0) + 1; });
   Object.keys(exc).forEach(function(id){ add('amber', 'vel', placaDe(id) + ': ' + exc[id] + ' viagem(ns) acima de ' + lim + ' km/h', 'Veja em Rastreamento › Viagens'); });
   aderencia().forEach(function(a){ if(a.pct != null && a.pct < 80) add(a.pct < 50 ? 'red' : 'amber', 'visita', a.p.nome + ': ' + fmtN(a.pct) + '% das visitas', a.n + ' de ' + fmtN(a.esperado) + ' esperadas no período'); });
+  var us = cfg('ultimaSync', null);
+  if(us && us.erro) add('amber', 'sync', 'Sincronização com a AgileSat falhou', fmtDT(us.erroEm) + ' · veja em Cadastros › Integração');
   var ord = {red:0, amber:1, teal:2}; A.sort(function(a, b){ return ord[a.sev] - ord[b.sev]; });
   return A;
 }
@@ -1608,7 +1610,8 @@ VIEWS.integracao = function(){
   var ed = can('admin');
   var dis = ed ? '' : ' disabled';
   var html = '<div class="stats">' +
-      stat('Última sincronização', us ? fmtDT(us.em) : 'nunca', us ? esc(us.resumo || '') + (us.origem ? ' · ' + esc(us.origem) : '') : '', us ? 'teal' : '') +
+      (us && us.erro ? stat('Sincronização com erro', fmtDT(us.erroEm), esc(us.erro), 'red') :
+      stat('Última sincronização', us && us.em ? fmtDT(us.em) : 'nunca', us ? esc(us.resumo || '') + (us.origem ? ' · ' + esc(us.origem) : '') : '', us && us.em ? 'teal' : '')) +
       stat('Veículos vinculados', linked + '<span class="mono"> / ' + vals(DB.veiculos).length + '</span>', 'com ID do AgileSat') +
       stat('Posições recebidas', vals(DB.posicoes).length) +
       stat('Viagens do rastreador', vals(DB.viagens).filter(function(v){ return v.fonte === 'AgileSat'; }).length) +

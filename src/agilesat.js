@@ -8,7 +8,8 @@ VIEWS.integracao = function(){
   var ed = can('admin');
   var dis = ed ? '' : ' disabled';
   var html = '<div class="stats">' +
-      stat('Última sincronização', us ? fmtDT(us.em) : 'nunca', us ? esc(us.resumo || '') + (us.origem ? ' · ' + esc(us.origem) : '') : '', us ? 'teal' : '') +
+      (us && us.erro ? stat('Sincronização com erro', fmtDT(us.erroEm), esc(us.erro), 'red') :
+      stat('Última sincronização', us && us.em ? fmtDT(us.em) : 'nunca', us ? esc(us.resumo || '') + (us.origem ? ' · ' + esc(us.origem) : '') : '', us && us.em ? 'teal' : '')) +
       stat('Veículos vinculados', linked + '<span class="mono"> / ' + vals(DB.veiculos).length + '</span>', 'com ID do AgileSat') +
       stat('Posições recebidas', vals(DB.posicoes).length) +
       stat('Viagens do rastreador', vals(DB.viagens).filter(function(v){ return v.fonte === 'AgileSat'; }).length) +
