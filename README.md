@@ -36,17 +36,21 @@ O painel avisa quando um veículo ativo fica mais de 15 dias sem leitura de KM.
 Sem a configuração, o painel roda em **modo demonstração** (senha `demo`, dados só no navegador). Em Cadastros › Sistema dá para carregar dados de exemplo para treinar a equipe.
 
 ## Integração AgileSat (automática)
-O workflow `.github/workflows/agilesat-sync.yml` roda `tools/agilesat_sync.py` de hora em hora: lê veículos, última posição e histórico da API da AgileSat, monta as viagens, detecta as visitas aos postos e grava tudo no Firebase.
+A AgileSat usa a plataforma Fulltrack. A API usada é a **RESTrack** (`https://ws.fulltrack2.com`, documentação em `/apidoc/`), autenticada pelos cabeçalhos `apiKey` e `secretKey`. Ela não permite chamada direta do navegador (CORS), por isso a sincronização roda no GitHub Actions.
 
-1. Peça à AgileSat o acesso à API (token ou usuário de integração) e a documentação dos endpoints de veículos, última posição e histórico.
-2. No painel, em Cadastros › Integração, preencha a URL base e os endpoints e salve.
-3. Em Settings › Secrets and variables › Actions, cadastre:
-   - `FIREBASE_DATABASE_URL` — URL do Realtime Database;
-   - `FIREBASE_SERVICE_ACCOUNT` — JSON da conta de serviço (Firebase › Configurações do projeto › Contas de serviço › Gerar nova chave privada);
-   - `AGILESAT_TOKEN` — ou `AGILESAT_USUARIO` e `AGILESAT_SENHA`, se a API usar login.
-4. Rode uma vez pela aba Actions (Sincronizar AgileSat › Run workflow).
+O workflow `.github/workflows/agilesat-sync.yml` roda `tools/agilesat_sync.py` de hora em hora (minuto 17) e grava no Firebase:
+- **veículos** (`/vehicles/all`), casando pelo ID do AgileSat ou pela placa; hodômetro em metros, convertido para km;
+- **última posição** (`/events/all`), com horários convertidos de UTC para Brasília;
+- **viagens** (`/events/interval/id/{id}/begin/{ts}/end/{ts}`), com KM pelo hodômetro, velocidade máxima, tempo parado e trajeto;
+- **postos de trabalho** a partir dos pontos de referência (`/referencepoints/all`). Só cria os novos, com raio de 200 m e frequência 0;
+- **motoristas** (`/drivers/all`): só nome e vencimento da CNH, sem CPF nem número da CNH;
+- **visitas**: posições seguidas dentro da cerca de um posto por 3 minutos ou mais.
 
-Para conferir os nomes dos campos da API antes de ligar a automação: `python tools/agilesat_sync.py --teste --config config.json`. Se algum campo não bater, ajuste o dicionário `CAMPOS` no script. Sem o GitHub Actions, `--arquivo` gera um `agilesat_export.json` para importar no painel.
+Segredos necessários (Settings › Secrets and variables › Actions): `AGILESAT_APIKEY`, `AGILESAT_SECRETKEY` e `FIREBASE_SERVICE_ACCOUNT` (Firebase › Configurações do projeto › Contas de serviço › Gerar nova chave privada; cole o JSON inteiro).
+
+O workflow nunca termina com erro, para não gerar e-mail de falha: o erro aparece no painel (Cadastros › Integração e alertas do Início).
+
+Para testar no computador sem gravar nada: `AGILESAT_APIKEY=... AGILESAT_SECRETKEY=... python tools/agilesat_sync.py --teste`.
 
 ## Desenvolvimento
 O código-fonte fica em `src/`. Rode `python3 build.py` para gerar o `index.html`.

@@ -1,91 +1,64 @@
 #!/usr/bin/env python3
 """
-Conector AgileSat -> Painel Frota (Grupo Login Serv)
-====================================================
+Conector AgileSat (Fulltrack / RESTrack) -> Painel Frota (Grupo Login Serv)
+===========================================================================
 
-Lê a API do rastreador AgileSat e grava no Firebase Realtime Database do painel
-(nó `painel-frota`): veículos, última posição, viagens com trajeto e visitas aos
-postos de trabalho. Roda sozinho pelo GitHub Actions (.github/workflows/agilesat-sync.yml).
+Lê a API RESTrack da Fulltrack (https://ws.fulltrack2.com), que é a plataforma usada
+pela AgileSat, e grava no Firebase Realtime Database do painel (nó `painel-frota`):
 
-Modo Firebase (GitHub Actions) — variáveis de ambiente:
-    FIREBASE_DATABASE_URL       URL do Realtime Database (https://xxx-default-rtdb.firebaseio.com)
-    FIREBASE_SERVICE_ACCOUNT    JSON da conta de serviço do Firebase (Configurações do projeto > Contas de serviço)
-    AGILESAT_TOKEN              token da API (ou AGILESAT_USUARIO + AGILESAT_SENHA, se a autenticação for por login)
-  A URL base e os endpoints são lidos do próprio painel (Cadastros > Integração), em config/agilesat.
+  - veículos (placa, modelo, ano, hodômetro)          <- /vehicles/all + /events/all
+  - última posição de cada veículo                     <- /events/all
+  - viagens com trajeto, KM pelo hodômetro, vel. máx.  <- /events/interval/id/{id}/begin/{ts}/end/{ts}
+  - postos de trabalho (pontos de referência)          <- /referencepoints/all  (só cria os novos)
+  - motoristas (nome e vencimento da CNH)              <- /drivers/all          (só cria os novos)
+  - visitas aos postos (cerca de cada posto)           <- calculado pelas viagens
 
-Modo arquivo (sem Firebase), para testar no computador:
+Autenticação da API: cabeçalhos `apiKey` e `secretKey`.
+Os horários da API vêm em UTC e são convertidos para o horário de Brasília.
+
+Variáveis de ambiente (GitHub Actions > Secrets):
+    AGILESAT_APIKEY, AGILESAT_SECRETKEY   chaves da AgileSat/Fulltrack
+    FIREBASE_SERVICE_ACCOUNT              JSON da conta de serviço do Firebase
+    FIREBASE_DATABASE_URL                 (opcional) URL do Realtime Database
+
+Testar no computador, sem gravar nada:
     pip install requests
-    python agilesat_sync.py --arquivo --config config.json   # gera agilesat_export.json para importar no painel
-    python agilesat_sync.py --teste --config config.json     # mostra um exemplo da resposta de cada endpoint
-
-Como a documentação da API da AgileSat não é pública, os caminhos dos endpoints
-e os nomes dos campos variam. O script tenta reconhecer automaticamente os nomes
-mais comuns (lat/latitude, speed/velocidade, plate/placa...). Se algum campo não
-vier, ajuste o dicionário CAMPOS abaixo com o nome que aparece na resposta da API
-(rode com --teste para ver um exemplo da resposta).
+    AGILESAT_APIKEY=... AGILESAT_SECRETKEY=... python agilesat_sync.py --teste
 """
-import json, math, os, re, sys, argparse
+import argparse
+import json
+import math
+import os
+import random
+import re
+import string
+import sys
+import time
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 
 try:
     import requests
 except ImportError:
     sys.exit("Instale a biblioteca: pip install requests")
 
-PASTA = Path(__file__).resolve().parent
+try:
+    from zoneinfo import ZoneInfo
+    TZ_BR = ZoneInfo("America/Sao_Paulo")
+except Exception:  # sem base de fusos: Brasília é UTC-3 (sem horário de verão)
+    TZ_BR = timezone(timedelta(hours=-3))
 
-# Nomes possíveis de cada campo na resposta da API (o primeiro que existir é usado).
-# Aceita caminhos com ponto, ex.: "position.latitude".
-CAMPOS = {
-    "id":        ["id", "vehicleId", "veiculoId", "idVeiculo", "deviceId", "trackerId", "imei", "codigo"],
-    "placa":     ["placa", "plate", "licensePlate", "vehiclePlate", "identificacao", "nome", "name"],
-    "modelo":    ["modelo", "model", "descricao", "description"],
-    "lat":       ["lat", "latitude", "position.latitude", "posicao.latitude", "gps.lat"],
-    "lng":       ["lng", "lon", "long", "longitude", "position.longitude", "posicao.longitude", "gps.lng"],
-    "velocidade":["velocidade", "speed", "vel", "gpsSpeed"],
-    "ignicao":   ["ignicao", "ignition", "ign", "ignitionOn", "motorLigado"],
-    "data":      ["dataHora", "data_hora", "datetime", "dateTime", "gpsTime", "date", "data", "timestamp", "eventDate"],
-    "endereco":  ["endereco", "address", "logradouro", "location"],
-    "hodometro": ["hodometro", "odometro", "odometer", "odometro_km", "km", "totalDistance"],
-}
-# Onde a lista de itens costuma vir dentro da resposta
-CHAVES_LISTA = ["data", "items", "result", "results", "veiculos", "vehicles", "posicoes", "positions", "content", "rows"]
+API = "https://ws.fulltrack2.com"
+DB_URL_PADRAO = "https://frota-f2697-default-rtdb.firebaseio.com"
+RAIZ = "painel-frota"
 
-PARADA_MIN = 10        # minutos parado/ignição desligada que encerram uma viagem
-VEL_PARADO = 3         # km/h abaixo disso conta como parado
-MAX_PONTOS = 400       # pontos de GPS guardados por viagem (o painel desenha o trajeto)
+HORAS_PADRAO = 3        # janela lida a cada execução (+2h de folga)
+PARADA_MIN = 10         # minutos parado que encerram uma viagem
+VEL_PARADO = 3          # km/h abaixo disso conta como parado
+MAX_PONTOS = 400        # pontos de GPS guardados por viagem
+RAIO_PADRAO = 200       # raio (m) dos postos criados a partir dos pontos de referência
 
 
-def pega(obj, nomes):
-    for n in nomes:
-        cur = obj
-        ok = True
-        for parte in n.split("."):
-            if isinstance(cur, dict) and parte in cur:
-                cur = cur[parte]
-            else:
-                ok = False
-                break
-        if ok and cur not in (None, ""):
-            return cur
-    return None
-
-
-def lista(resp):
-    if isinstance(resp, list):
-        return resp
-    if isinstance(resp, dict):
-        for k in CHAVES_LISTA:
-            if isinstance(resp.get(k), list):
-                return resp[k]
-            if isinstance(resp.get(k), dict):
-                inner = lista(resp[k])
-                if inner:
-                    return inner
-    return []
-
-
+# ---------------------------------------------------------------- utilidades
 def num(v, padrao=0.0):
     try:
         return float(str(v).replace(",", "."))
@@ -93,30 +66,23 @@ def num(v, padrao=0.0):
         return padrao
 
 
-def booleano(v):
-    if isinstance(v, bool):
-        return v
-    return str(v).strip().lower() in ("1", "true", "sim", "on", "ligado", "ligada", "yes")
-
-
-def data_iso(v):
-    if v is None:
+def data_br(s):
+    """'16/11/2026 19:27:21' (UTC) -> '2026-11-16T16:27' (Brasília)."""
+    if not s:
         return ""
-    if isinstance(v, (int, float)):  # epoch (s ou ms)
-        ts = v / 1000 if v > 1e11 else v
-        return datetime.fromtimestamp(ts).strftime("%Y-%m-%dT%H:%M:%S")
-    s = str(v).strip()
-    for fmt in ("%d/%m/%Y %H:%M:%S", "%d/%m/%Y %H:%M", "%Y-%m-%d %H:%M:%S"):
-        try:
-            return datetime.strptime(s, fmt).strftime("%Y-%m-%dT%H:%M:%S")
-        except ValueError:
-            pass
     try:
-        d = datetime.fromisoformat(s.replace("Z", "+00:00"))
-        if d.tzinfo:
-            d = d.astimezone().replace(tzinfo=None)  # horário local do computador
-        return d.strftime("%Y-%m-%dT%H:%M:%S")
+        d = datetime.strptime(str(s).strip(), "%d/%m/%Y %H:%M:%S").replace(tzinfo=timezone.utc)
+        return d.astimezone(TZ_BR).strftime("%Y-%m-%dT%H:%M")
     except ValueError:
+        return ""
+
+
+def corrige_texto(s):
+    """Corrige acentos que a API devolve com codificação dupla (ex.: 'MarÃ­lia')."""
+    s = str(s or "").strip()
+    try:
+        return s.encode("latin-1").decode("utf-8")
+    except (UnicodeEncodeError, UnicodeDecodeError):
         return s
 
 
@@ -126,83 +92,101 @@ def haversine_km(a, b, c, d):
     return 2 * 6371 * math.asin(math.sqrt(h))
 
 
-class Api:
-    def __init__(self, cfg):
-        self.cfg = cfg
-        self.base = cfg["base_url"].rstrip("/")
+def nova_chave():
+    return "-L" + format(int(time.time() * 1000), "x") + "".join(random.choices(string.ascii_lowercase + string.digits, k=8))
+
+
+def norm_placa(s):
+    return re.sub(r"[^A-Z0-9]", "", str(s or "").upper())
+
+
+def norm_txt(s):
+    import unicodedata
+    s = unicodedata.normalize("NFD", str(s or "")).encode("ascii", "ignore").decode()
+    return re.sub(r"\s+", " ", s).strip().lower()
+
+
+# ---------------------------------------------------------------- API Fulltrack
+class Fulltrack:
+    def __init__(self, apikey, secretkey):
         self.s = requests.Session()
-        self.s.headers["Accept"] = "application/json"
-        auth = cfg.get("auth", {})
-        tipo = auth.get("type", "bearer")
-        if tipo == "bearer":
-            self.s.headers["Authorization"] = f"Bearer {auth.get('token','')}"
-        elif tipo == "header":
-            self.s.headers[auth.get("header_name") or "x-api-key"] = auth.get("token", "")
-        elif tipo == "login":
-            ep = cfg["endpoints"].get("login") or "/login"
-            r = self.s.post(self.base + ep, json={"usuario": auth.get("usuario"), "username": auth.get("usuario"),
-                                                  "login": auth.get("usuario"), "senha": auth.get("senha"),
-                                                  "password": auth.get("senha")}, timeout=30)
+        self.s.headers.update({"apiKey": apikey, "secretKey": secretkey, "Accept": "application/json"})
+
+    def get(self, caminho):
+        for tentativa in range(3):
+            r = self.s.get(API + caminho, timeout=60)
+            if r.status_code in (401, 403):
+                raise RuntimeError("A AgileSat/Fulltrack recusou as chaves (HTTP %s)." % r.status_code)
+            if r.status_code >= 500 and tentativa < 2:
+                time.sleep(3)
+                continue
             r.raise_for_status()
             j = r.json()
-            tok = pega(j, ["token", "access_token", "accessToken", "data.token", "jwt"])
-            if not tok:
-                sys.exit(f"Login feito, mas não encontrei o token na resposta: {str(j)[:300]}")
-            self.s.headers["Authorization"] = f"Bearer {tok}"
-
-    def get(self, caminho, **fmt):
-        url = self.base + caminho.format(**fmt)
-        r = self.s.get(url, timeout=60)
-        if r.status_code == 401:
-            sys.exit("A API recusou o acesso (401). Confira o token/usuário no config.json.")
-        r.raise_for_status()
-        return r.json()
+            if isinstance(j, dict) and j.get("status") is False:
+                msg = str(j.get("message", ""))
+                if "not found" in msg.lower() or "nenhum" in msg.lower():
+                    return []
+                raise RuntimeError("API: " + msg)
+            return (j.get("data") if isinstance(j, dict) else j) or []
+        return []
 
 
-def montar_viagens(rid, placa, pontos):
-    """Divide o histórico de posições em viagens (ignição/parada > PARADA_MIN)."""
-    pontos = sorted(pontos, key=lambda p: p["t"])
-    viagens, atual, parado_desde = [], None, None
+def ponto(e):
+    """Evento da API -> ponto simples."""
+    lat, lng = num(e.get("ras_eve_latitude"), None), num(e.get("ras_eve_longitude"), None)
+    t = data_br(e.get("ras_eve_data_gps"))
+    if lat is None or lng is None or not t or (lat == 0 and lng == 0):
+        return None
+    return {"lat": lat, "lng": lng, "t": t, "vel": num(e.get("ras_eve_velocidade")),
+            "ign": str(e.get("ras_eve_ignicao")) == "1", "hod": num(e.get("ras_eve_hodometro"), 0) / 1000.0}
+
+
+def montar_viagens(pts):
+    """Divide as posições em viagens: termina quando a ignição desliga ou fica parado > PARADA_MIN."""
+    pts = sorted(pts, key=lambda p: p["t"])
+    viagens, atual, parado_desde, ant = [], None, None, None
 
     def fechar():
         nonlocal atual
-        if atual and len(atual["pts"]) >= 2 and atual["km"] >= 0.3:
-            pts = atual["pts"]
-            passo = max(1, len(pts) // MAX_PONTOS)
-            amostra = pts[::passo]
-            if amostra[-1] is not pts[-1]:
-                amostra.append(pts[-1])
-            viagens.append({
-                "rastreadorId": rid, "placa": placa,
-                "inicio": pts[0]["t"][:16], "fim": pts[-1]["t"][:16],
-                "km": round(atual["km"], 1), "velMax": round(atual["vmax"]),
-                "paradoMin": round(atual["parado"]),
-                "origem": pts[0].get("end", ""), "destino": pts[-1].get("end", ""),
-                "pontos": [[round(p["lat"], 6), round(p["lng"], 6), p["t"][:16]] for p in amostra],
-            })
+        if atual and len(atual["pts"]) >= 2:
+            p = atual["pts"]
+            km_hod = p[-1]["hod"] - p[0]["hod"] if p[0]["hod"] and p[-1]["hod"] else 0
+            km = km_hod if 0 < km_hod < 2000 else atual["km_gps"]
+            if km >= 0.3:
+                passo = max(1, len(p) // MAX_PONTOS)
+                amostra = p[::passo]
+                if amostra[-1] is not p[-1]:
+                    amostra.append(p[-1])
+                viagens.append({"inicio": p[0]["t"], "fim": p[-1]["t"], "km": round(km, 1),
+                                "kmInicial": round(p[0]["hod"]) if p[0]["hod"] else None,
+                                "kmFinal": round(p[-1]["hod"]) if p[-1]["hod"] else None,
+                                "velMax": round(atual["vmax"]), "paradoMin": round(atual["parado"]),
+                                "pontos": [[round(x["lat"], 6), round(x["lng"], 6), x["t"]] for x in amostra]})
         atual = None
 
-    ant = None
-    for p in pontos:
+    def minutos(a, b):
+        return (datetime.fromisoformat(b) - datetime.fromisoformat(a)).total_seconds() / 60
+
+    for p in pts:
         movendo = p["vel"] > VEL_PARADO
-        if ant:
-            dt_min = (datetime.fromisoformat(p["t"]) - datetime.fromisoformat(ant["t"])).total_seconds() / 60
-        else:
-            dt_min = 0
         if atual is None:
-            if movendo or p["ign"]:
-                atual = {"pts": [p], "km": 0.0, "vmax": p["vel"], "parado": 0.0}
+            if movendo:
+                atual = {"pts": [ant or p] if ant and minutos(ant["t"], p["t"]) < PARADA_MIN else [p],
+                         "km_gps": 0.0, "vmax": p["vel"], "parado": 0.0}
+                if atual["pts"][0] is not p:
+                    atual["pts"].append(p)
                 parado_desde = None
         else:
-            atual["km"] += haversine_km(ant["lat"], ant["lng"], p["lat"], p["lng"])
+            q = atual["pts"][-1]
+            atual["km_gps"] += haversine_km(q["lat"], q["lng"], p["lat"], p["lng"])
             atual["vmax"] = max(atual["vmax"], p["vel"])
             atual["pts"].append(p)
+            dt = minutos(q["t"], p["t"])
             if not movendo:
-                parado_desde = parado_desde or ant["t"]
+                parado_desde = parado_desde or q["t"]
                 if p["ign"]:
-                    atual["parado"] += dt_min
-                ociosa = (datetime.fromisoformat(p["t"]) - datetime.fromisoformat(parado_desde)).total_seconds() / 60
-                if (not p["ign"] and ociosa >= 1) or ociosa >= PARADA_MIN or dt_min >= PARADA_MIN:
+                    atual["parado"] += dt
+                if not p["ign"] or minutos(parado_desde, p["t"]) >= PARADA_MIN or dt >= PARADA_MIN:
                     fechar()
                     parado_desde = None
             else:
@@ -212,18 +196,17 @@ def montar_viagens(rid, placa, pontos):
     return viagens
 
 
+# ---------------------------------------------------------------- Firebase
 class Firebase:
-    """Leitura/gravação no Realtime Database pela API REST, com conta de serviço."""
-    def __init__(self, url, sa_json, raiz="painel-frota"):
+    def __init__(self, url, sa_json):
         from google.oauth2 import service_account
         from google.auth.transport.requests import Request
-        info = json.loads(sa_json)
         cred = service_account.Credentials.from_service_account_info(
-            info, scopes=["https://www.googleapis.com/auth/firebase.database",
-                          "https://www.googleapis.com/auth/userinfo.email"])
+            json.loads(sa_json), scopes=["https://www.googleapis.com/auth/firebase.database",
+                                         "https://www.googleapis.com/auth/userinfo.email"])
         cred.refresh(Request())
         self.tok = cred.token
-        self.base = url.rstrip("/") + "/" + raiz
+        self.base = url.rstrip("/") + "/" + RAIZ
 
     def get(self, caminho):
         r = requests.get(f"{self.base}/{caminho}.json", params={"access_token": self.tok}, timeout=60)
@@ -231,229 +214,219 @@ class Firebase:
         return r.json()
 
     def update(self, paths):
-        # grava em lotes para não estourar o tamanho da requisição
         itens = list(paths.items())
-        for i in range(0, len(itens), 400):
+        for i in range(0, len(itens), 300):
             r = requests.patch(f"{self.base}.json", params={"access_token": self.tok},
-                               data=json.dumps(dict(itens[i:i + 400])), timeout=120)
+                               data=json.dumps(dict(itens[i:i + 300])), timeout=120)
             r.raise_for_status()
 
 
-def chave_segura(s):
-    return re.sub(r"[.#$\[\]/]", "_", str(s))[:180]
+VISITA_MIN = 3   # minutos mínimos dentro da cerca para contar como visita (evita passagens)
 
 
-def nova_chave():
-    import random, string, time
-    return "-L" + format(int(time.time() * 1000), "x") + "".join(random.choices(string.ascii_lowercase + string.digits, k=8))
-
-
-def ler_agilesat(cfg, teste=False):
-    """Busca veículos, últimas posições e o histórico e monta as viagens."""
-    ep = cfg.get("endpoints", {})
-    api = Api(cfg)
-    veiculos, posicoes, viagens = [], [], []
-    if ep.get("veiculos"):
-        brutos = lista(api.get(ep["veiculos"]))
-        if teste:
-            print("VEÍCULOS — exemplo:", json.dumps(brutos[:1], ensure_ascii=False, indent=2)[:1500])
-        for v in brutos:
-            veiculos.append({"rastreadorId": str(pega(v, CAMPOS["id"]) or ""), "placa": pega(v, CAMPOS["placa"]) or "",
-                             "modelo": pega(v, CAMPOS["modelo"]) or "", "kmAtual": num(pega(v, CAMPOS["hodometro"]))})
-    if ep.get("posicoes"):
-        brutos = lista(api.get(ep["posicoes"]))
-        if teste:
-            print("POSIÇÕES — exemplo:", json.dumps(brutos[:1], ensure_ascii=False, indent=2)[:1500])
-        for p in brutos:
-            posicoes.append({"rastreadorId": str(pega(p, CAMPOS["id"]) or ""), "placa": pega(p, CAMPOS["placa"]) or "",
-                             "lat": num(pega(p, CAMPOS["lat"])), "lng": num(pega(p, CAMPOS["lng"])),
-                             "velocidade": num(pega(p, CAMPOS["velocidade"])), "ignicao": booleano(pega(p, CAMPOS["ignicao"])),
-                             "endereco": pega(p, CAMPOS["endereco"]) or "", "dataHora": data_iso(pega(p, CAMPOS["data"])),
-                             "hodometro": num(pega(p, CAMPOS["hodometro"]))})
-    if ep.get("historico") and veiculos:
-        fim = datetime.now()
-        # janela com folga de 2h: viagens repetidas caem na mesma chave e são sobrescritas
-        ini = fim - timedelta(hours=float(cfg.get("horas", 3)) + 2)
-        for v in veiculos:
-            if not v["rastreadorId"]:
-                continue
+def detectar_visitas(pts_por_veic, postos, visitas):
+    """Posições seguidas dentro do raio de um posto viram uma visita (chegada = 1ª, saída = última).
+    A chave é fixa (veículo + posto + chegada): execuções seguintes só atualizam a saída."""
+    manuais = []
+    for v in (visitas or {}).values():
+        if isinstance(v, dict) and not str(v.get("fonte", "")).startswith("Autom"):
             try:
-                brutos = lista(api.get(ep["historico"], id=v["rastreadorId"],
-                                       inicio=ini.strftime("%Y-%m-%dT%H:%M:%S"), fim=fim.strftime("%Y-%m-%dT%H:%M:%S")))
-            except requests.HTTPError as e:
-                print(f"  aviso: histórico de {v['placa']} falhou ({e})")
-                continue
-            if teste:
-                print("HISTÓRICO — exemplo:", json.dumps(brutos[:1], ensure_ascii=False, indent=2)[:1500])
-                break
-            pts = []
-            for p in brutos:
-                lat, lng = num(pega(p, CAMPOS["lat"]), None), num(pega(p, CAMPOS["lng"]), None)
-                t = data_iso(pega(p, CAMPOS["data"]))
-                if lat is None or lng is None or not t or (lat == 0 and lng == 0):
-                    continue
-                pts.append({"lat": lat, "lng": lng, "t": t, "vel": num(pega(p, CAMPOS["velocidade"])),
-                            "ign": booleano(pega(p, CAMPOS["ignicao"])), "end": pega(p, CAMPOS["endereco"]) or ""})
-            pts.sort(key=lambda p: p["t"])
-            vg = montar_viagens(v["rastreadorId"], v["placa"], pts)
-            # viagem já em andamento no começo da janela foi gravada inteira numa execução anterior
-            if vg and pts and (pts[0]["vel"] > VEL_PARADO) and vg[0]["inicio"] == pts[0]["t"][:16]:
-                vg = vg[1:]
-            print(f"  {v['placa'] or v['rastreadorId']}: {len(pts)} posições -> {len(vg)} viagem(ns)")
-            viagens.extend(vg)
-    return veiculos, posicoes, viagens
-
-
-def detectar_visitas(viagens_por_id, postos, visitas):
-    """Mesma regra do painel: pontos dentro do raio do posto viram uma visita (chegada/saída)."""
+                manuais.append((v.get("postoId"), v.get("veiculoId"), datetime.fromisoformat(v.get("chegada", ""))))
+            except ValueError:
+                pass
     novas = {}
-    existentes = [(v.get("postoId"), v.get("veiculoId"), v.get("chegada", "")) for v in (visitas or {}).values() if isinstance(v, dict)]
-    def dup(pid, vid, ch):
-        try:
-            t = datetime.fromisoformat(ch)
-        except ValueError:
-            return False
-        for p2, v2, c2 in existentes:
-            if p2 == pid and v2 == vid:
-                try:
-                    if abs((datetime.fromisoformat(c2) - t).total_seconds()) < 1800:
-                        return True
-                except ValueError:
-                    pass
-        return False
-    for t in viagens_por_id.values():
-        pts = t.get("pontos") or []
+    for (vid, rid, motorista), pts in pts_por_veic.items():
         for pid, p in (postos or {}).items():
             if not isinstance(p, dict) or p.get("lat") in (None, ""):
                 continue
-            raio = num(p.get("raio"), 200) or 200
+            raio = num(p.get("raio"), RAIO_PADRAO) or RAIO_PADRAO
             ini = fim = None
             for q in pts + [None]:
-                dentro = q is not None and haversine_km(q[0], q[1], num(p["lat"]), num(p["lng"])) * 1000 <= raio
-                if dentro:
+                if q is not None and haversine_km(q["lat"], q["lng"], num(p["lat"]), num(p["lng"])) * 1000 <= raio:
                     ini = ini or q
                     fim = q
-                elif ini:
-                    ch, sa = ini[2][:16], fim[2][:16]
-                    if not dup(pid, t["veiculoId"], ch):
-                        novas[nova_chave()] = {"postoId": pid, "veiculoId": t["veiculoId"], "motorista": t.get("motorista", ""),
-                                               "chegada": ch, "saida": sa, "fonte": "Automática (rastreador)",
-                                               "obs": "Detectada pela cerca do posto"}
-                        existentes.append((pid, t["veiculoId"], ch))
-                    ini = fim = None
+                    continue
+                if ini:
+                    dur = (datetime.fromisoformat(fim["t"]) - datetime.fromisoformat(ini["t"])).total_seconds() / 60
+                    ch = datetime.fromisoformat(ini["t"])
+                    manual = any(a == pid and b == vid and abs((c - ch).total_seconds()) < 1800 for a, b, c in manuais)
+                    if dur >= VISITA_MIN and not manual:
+                        k = re.sub(r"[.#$\[\]/]", "_", f"ag_{rid}_{pid}_{ini['t']}")
+                        novas[k] = {"postoId": pid, "veiculoId": vid, "motorista": motorista, "chegada": ini["t"],
+                                    "saida": fim["t"], "fonte": "Automática (rastreador)", "obs": "Detectada pela cerca do posto"}
+                ini = fim = None
     return novas
 
 
-def gravar_firebase(fb, veiculos, posicoes, viagens):
-    cad = fb.get("veiculos") or {}
+# ---------------------------------------------------------------- sincronização
+def sincronizar(api, fb, horas, teste=False):
+    veic_api = api.get("/vehicles/all")
+    ultimos = {str(e.get("ras_vei_id")): e for e in api.get("/events/all")}
+    refs = api.get("/referencepoints/all")
+    mots = api.get("/drivers/all")
+    if teste:
+        print(f"Veículos: {len(veic_api)} · últimas posições: {len(ultimos)} · pontos de referência: {len(refs)} · motoristas: {len(mots)}")
+
+    cad = (fb.get("veiculos") if fb else {}) or {}
+    postos = (fb.get("postos") if fb else {}) or {}
+    motoristas = (fb.get("motoristas") if fb else {}) or {}
+    paths, cont = {}, {"novos": 0, "pos": 0, "viagens": 0, "postos": 0, "mot": 0}
+
     def acha(rid, placa):
-        pl = re.sub(r"[^A-Z0-9]", "", str(placa or "").upper())
         for vid, v in cad.items():
-            if rid and str(v.get("rastreadorId", "")) == str(rid):
+            if isinstance(v, dict) and str(v.get("rastreadorId", "")) == rid:
                 return vid, v
         for vid, v in cad.items():
-            if pl and re.sub(r"[^A-Z0-9]", "", str(v.get("placa", "")).upper()) == pl:
+            if isinstance(v, dict) and placa and norm_placa(v.get("placa")) == norm_placa(placa):
                 return vid, v
         return None, None
-    paths, novos = {}, 0
-    for x in veiculos:
-        vid, v = acha(x["rastreadorId"], x["placa"])
-        if vid:
-            if x["rastreadorId"] and v.get("rastreadorId") != x["rastreadorId"]:
-                paths[f"veiculos/{vid}/rastreadorId"] = x["rastreadorId"]
-            if x["kmAtual"] > num(v.get("kmAtual")):
-                paths[f"veiculos/{vid}/kmAtual"] = round(x["kmAtual"])
-        else:
+
+    # --- veículos e última posição
+    ids = {}
+    for x in veic_api:
+        rid, placa = str(x.get("ras_vei_id")), x.get("ras_vei_placa")
+        ev = ultimos.get(rid, {})
+        km = num(ev.get("ras_eve_hodometro"), 0) / 1000.0
+        vid, v = acha(rid, placa)
+        if not vid:
             vid = nova_chave()
-            novo = {"placa": str(x["placa"] or x["rastreadorId"]).upper(), "modelo": x["modelo"], "rastreadorId": x["rastreadorId"],
-                    "status": "Ativo", "tipo": "Carro", "combustivel": "Flex", "origem": "AgileSat"}
-            if x["kmAtual"]:
-                novo["kmAtual"] = round(x["kmAtual"])
-            paths[f"veiculos/{vid}"] = novo
-            cad[vid] = novo
-            novos += 1
-    np = 0
-    for x in posicoes:
-        vid, v = acha(x["rastreadorId"], x["placa"])
-        if not vid:
+            v = {"placa": norm_placa(placa), "modelo": corrige_texto(x.get("ras_vei_veiculo")), "status": "Ativo",
+                 "tipo": "Carro", "combustivel": "Flex", "rastreadorId": rid, "origem": "AgileSat"}
+            if x.get("ras_vei_ano"):
+                v["ano"] = int(num(x["ras_vei_ano"]))
+            if km:
+                v["kmAtual"] = round(km)
+            paths[f"veiculos/{vid}"] = v
+            cad[vid] = v
+            cont["novos"] += 1
+        else:
+            if str(v.get("rastreadorId", "")) != rid:
+                paths[f"veiculos/{vid}/rastreadorId"] = rid
+            if km and km > num(v.get("kmAtual")):
+                paths[f"veiculos/{vid}/kmAtual"] = round(km)
+        ids[rid] = (vid, v)
+        p = ponto(ev) if ev else None
+        if p:
+            paths[f"posicoes/{vid}"] = {"veiculoId": vid, "lat": p["lat"], "lng": p["lng"], "velocidade": p["vel"],
+                                        "ignicao": p["ign"], "dataHora": p["t"], "km": round(p["hod"]) if p["hod"] else None,
+                                        "endereco": "", "fonte": "AgileSat"}
+            cont["pos"] += 1
+
+    # --- histórico -> viagens
+    fim = int(time.time())
+    ini = fim - int((float(horas) + 2) * 3600)
+    novas_viagens, pts_por_veic = {}, {}
+    for rid, (vid, v) in ids.items():
+        try:
+            evs = api.get(f"/events/interval/id/{rid}/begin/{ini}/end/{fim}")
+        except Exception as e:
+            print(f"  aviso: histórico de {v.get('placa')} falhou ({e})")
             continue
-        paths[f"posicoes/{vid}"] = {"veiculoId": vid, "lat": x["lat"], "lng": x["lng"], "velocidade": x["velocidade"],
-                                    "ignicao": x["ignicao"], "endereco": x["endereco"], "dataHora": x["dataHora"][:16]}
-        if x["hodometro"] > num(v.get("kmAtual")) and f"veiculos/{vid}" not in paths:
-            paths[f"veiculos/{vid}/kmAtual"] = round(x["hodometro"])
-        np += 1
-    novas_viagens = {}
-    for t in viagens:
-        vid, v = acha(t["rastreadorId"], t["placa"])
-        if not vid:
-            continue
-        tid = chave_segura(f"ag_{t['rastreadorId']}_{t['inicio']}")
-        novas_viagens[tid] = {"veiculoId": vid, "motorista": v.get("motorista", ""), "inicio": t["inicio"], "fim": t["fim"],
-                              "origem": t["origem"], "destino": t["destino"], "km": t["km"], "velMax": t["velMax"],
-                              "paradoMin": t["paradoMin"], "fonte": "AgileSat", "pontos": t["pontos"]}
+        pts = sorted([p for p in (ponto(e) for e in evs) if p], key=lambda p: p["t"])
+        pts_por_veic[(vid, rid, v.get("motorista", ""))] = pts
+        vg = montar_viagens(pts)
+        # viagem que já estava em andamento no início da janela foi gravada numa execução anterior
+        if vg and pts and pts[0]["vel"] > VEL_PARADO and vg[0]["inicio"] == pts[0]["t"]:
+            vg = vg[1:]
+        print(f"  {v.get('placa')}: {len(pts)} posições -> {len(vg)} viagem(ns)")
+        for t in vg:
+            tid = re.sub(r"[.#$\[\]/]", "_", f"ag_{rid}_{t['inicio']}")
+            reg = {"veiculoId": vid, "motorista": v.get("motorista", ""), "origem": "", "destino": "", "fonte": "AgileSat"}
+            reg.update({k: val for k, val in t.items() if val is not None})
+            novas_viagens[tid] = reg
     for tid, t in novas_viagens.items():
         paths[f"viagens/{tid}"] = t
-    visitas = detectar_visitas(novas_viagens, fb.get("postos"), fb.get("visitas"))
+    cont["viagens"] = len(novas_viagens)
+
+    # --- pontos de referência -> postos (só os que ainda não existem)
+    por_ref = {str(p.get("refId")): k for k, p in postos.items() if isinstance(p, dict) and p.get("refId")}
+    por_nome = {norm_txt(p.get("nome")): k for k, p in postos.items() if isinstance(p, dict)}
+    for r in refs:
+        ref_id, nome = str(r.get("ras_ref_id")), corrige_texto(r.get("ras_ref_descricao"))
+        lat, lng = num(r.get("ras_ref_latitude"), None), num(r.get("ras_ref_longitude"), None)
+        if not nome or lat is None or lng is None or ref_id in por_ref:
+            continue
+        if norm_txt(nome) in por_nome:  # já cadastrado à mão: só liga ao ponto de referência
+            paths[f"postos/{por_nome[norm_txt(nome)]}/refId"] = ref_id
+            continue
+        pid = nova_chave()
+        cidade = corrige_texto(r.get("ras_ref_cidade"))
+        novo = {"nome": nome, "endereco": cidade.title() + (" - " + r.get("ras_ref_uf") if r.get("ras_ref_uf") else ""),
+                "lat": lat, "lng": lng, "raio": RAIO_PADRAO, "freqSemana": 0, "refId": ref_id, "origem": "AgileSat"}
+        paths[f"postos/{pid}"] = novo
+        postos[pid] = novo
+        cont["postos"] += 1
+
+    # --- motoristas (só nome e vencimento da CNH; sem CPF nem número da CNH)
+    por_mid = {str(m.get("motoristaId")) for m in motoristas.values() if isinstance(m, dict) and m.get("motoristaId")}
+    nomes = {norm_txt(m.get("nome")) for m in motoristas.values() if isinstance(m, dict)}
+    for m in mots:
+        mid, nome = str(m.get("ras_mot_id")), corrige_texto(m.get("ras_mot_nome")).title()
+        if not nome or nome.upper() == "PADRAO" or mid in por_mid or norm_txt(nome) in nomes:
+            continue
+        reg = {"nome": nome, "motoristaId": mid, "origem": "AgileSat"}
+        if re.match(r"\d{4}-\d{2}-\d{2}$", str(m.get("ras_mot_cnh_vence") or "")):
+            reg["vencCnh"] = m["ras_mot_cnh_vence"]
+        paths[f"motoristas/{nova_chave()}"] = reg
+        cont["mot"] += 1
+
+    # --- visitas
+    visitas = detectar_visitas(pts_por_veic, postos, fb.get("visitas") if fb else {})
     for k, v in visitas.items():
         paths[f"visitas/{k}"] = v
-    agora = int(datetime.now().timestamp() * 1000)
-    resumo = f"{len(veiculos)} veículos ({novos} novos), {np} posições, {len(novas_viagens)} viagens, {len(visitas)} visitas"
-    paths["config/ultimaSync"] = {"em": agora, "resumo": resumo, "origem": "GitHub Actions"}  # substitui e limpa erro anterior
+
+    resumo = (f"{len(veic_api)} veículos ({cont['novos']} novos), {cont['pos']} posições, {cont['viagens']} viagens, "
+              f"{len(visitas)} visitas" + (f", {cont['postos']} postos novos" if cont["postos"] else "")
+              + (f", {cont['mot']} motoristas novos" if cont["mot"] else ""))
+    agora = int(time.time() * 1000)
+    paths["config/ultimaSync"] = {"em": agora, "resumo": resumo, "origem": "GitHub Actions"}
     paths[f"logs/{nova_chave()}"] = {"ts": agora, "usuario": "Sincronização AgileSat", "acao": "Sincronizou o rastreador", "detalhe": resumo}
+
+    if teste:
+        print("\nTESTE (nada foi gravado):", resumo)
+        for k in list(paths)[:8]:
+            print("  ", k, str(paths[k])[:120])
+        return
     fb.update(paths)
     print("OK:", resumo)
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--config", default=str(PASTA / "config.json"), help="config.json (modo arquivo/teste)")
-    ap.add_argument("--teste", action="store_true", help="mostra um exemplo de cada resposta e sai")
-    ap.add_argument("--arquivo", action="store_true", help="gera agilesat_export.json em vez de gravar no Firebase")
+    ap.add_argument("--teste", action="store_true", help="lê a API e mostra o resultado, sem gravar no Firebase")
+    ap.add_argument("--horas", type=float, default=None, help="horas de histórico (padrão 3; use 24 na primeira carga)")
     a = ap.parse_args()
 
-    fb = None
-    if not a.arquivo and not a.teste and os.environ.get("FIREBASE_SERVICE_ACCOUNT"):
-        fb = Firebase(os.environ["FIREBASE_DATABASE_URL"], os.environ["FIREBASE_SERVICE_ACCOUNT"])
-        ag = fb.get("config/agilesat") or {}
-        if not ag.get("baseUrl"):
-            sys.exit("Configure a URL base e os endpoints no painel (Cadastros > Integração) antes de sincronizar.")
-        cfg = {"base_url": ag["baseUrl"], "endpoints": ag.get("endpoints", {}), "horas": ag.get("horas", 3),
-               "auth": {"type": ag.get("authType", "bearer"), "header_name": ag.get("headerName"),
-                        "token": os.environ.get("AGILESAT_TOKEN", ""),
-                        "usuario": os.environ.get("AGILESAT_USUARIO", ""), "senha": os.environ.get("AGILESAT_SENHA", "")}}
-    else:
-        cfg = json.loads(Path(a.config).read_text(encoding="utf-8"))
-        if not cfg.get("base_url"):
-            sys.exit("Preencha base_url no config.json (URL base da API da AgileSat).")
+    apikey, secret = os.environ.get("AGILESAT_APIKEY", ""), os.environ.get("AGILESAT_SECRETKEY", "")
+    if not apikey or not secret:
+        sys.exit("Faltam os segredos AGILESAT_APIKEY e AGILESAT_SECRETKEY.")
+    api = Fulltrack(apikey, secret)
 
-    veiculos, posicoes, viagens = ler_agilesat(cfg, a.teste)
-    if a.teste:
-        print("\nTeste concluído. Ajuste CAMPOS no script se algum nome não bater.")
-        return
-    if fb:
-        gravar_firebase(fb, veiculos, posicoes, viagens)
-        return
-    saida = PASTA / cfg.get("saida", "agilesat_export.json")
-    saida.write_text(json.dumps({"origem": "AgileSat", "geradoEm": datetime.now().isoformat(timespec="seconds"),
-                                 "veiculos": veiculos, "posicoes": posicoes, "viagens": viagens},
-                                ensure_ascii=False), encoding="utf-8")
-    print(f"\nOK: {len(veiculos)} veículos, {len(posicoes)} posições, {len(viagens)} viagens -> {saida}")
-    print("Importe esse arquivo no painel: Cadastros > Integração AgileSat.")
+    fb = None
+    if not a.teste:
+        if not os.environ.get("FIREBASE_SERVICE_ACCOUNT"):
+            sys.exit("Falta o segredo FIREBASE_SERVICE_ACCOUNT.")
+        fb = Firebase(os.environ.get("FIREBASE_DATABASE_URL") or DB_URL_PADRAO, os.environ["FIREBASE_SERVICE_ACCOUNT"])
+    horas = a.horas or num(os.environ.get("AGILESAT_HORAS"), 0) or HORAS_PADRAO
+    if fb and a.horas is None:
+        cfg = fb.get("config/agilesat") or {}
+        horas = num(cfg.get("horas"), 0) or horas
+    sincronizar(api, fb, horas, a.teste)
 
 
 def registrar_erro(msg):
     """Grava o erro em config/ultimaSync para aparecer no painel (Cadastros > Integração)."""
     try:
-        if os.environ.get("FIREBASE_SERVICE_ACCOUNT") and os.environ.get("FIREBASE_DATABASE_URL"):
-            fb = Firebase(os.environ["FIREBASE_DATABASE_URL"], os.environ["FIREBASE_SERVICE_ACCOUNT"])
-            fb.update({"config/ultimaSync/erro": str(msg)[:300], "config/ultimaSync/erroEm": int(datetime.now().timestamp() * 1000)})
+        if os.environ.get("FIREBASE_SERVICE_ACCOUNT"):
+            fb = Firebase(os.environ.get("FIREBASE_DATABASE_URL") or DB_URL_PADRAO, os.environ["FIREBASE_SERVICE_ACCOUNT"])
+            fb.update({"config/ultimaSync/erro": str(msg)[:300], "config/ultimaSync/erroEm": int(time.time() * 1000)})
     except Exception as e2:
         print("não consegui registrar o erro no painel:", e2)
 
 
 if __name__ == "__main__":
-    # Em modo automático (GitHub Actions) o script nunca termina com erro,
-    # para o GitHub não mandar e-mail de falha. O problema aparece no painel.
+    # No GitHub Actions o script nunca termina com erro (o GitHub não manda e-mail);
+    # o problema aparece no painel.
     automatico = os.environ.get("GITHUB_ACTIONS") == "true"
     try:
         main()

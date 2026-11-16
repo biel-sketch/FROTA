@@ -1,11 +1,15 @@
 name: Sincronizar AgileSat
 
 on:
-  # Agendamento desligado até a AgileSat liberar o acesso à API.
-  # Para ligar, tire o "#" das duas linhas abaixo (roda de hora em hora, no minuto 17).
-  # schedule:
-  #   - cron: '17 * * * *'
-  workflow_dispatch: {}   # permite rodar manualmente pela aba Actions
+  schedule:
+    # De hora em hora, no minuto 17
+    - cron: '17 * * * *'
+  workflow_dispatch:
+    inputs:
+      horas:
+        description: 'Horas de histórico a buscar (use 24 ou mais na primeira vez)'
+        required: false
+        default: ''
 
 jobs:
   sync:
@@ -28,9 +32,9 @@ jobs:
       - name: Ler a AgileSat e gravar no Firebase
         continue-on-error: true   # nunca gera e-mail de falha; erros aparecem no painel
         env:
-          FIREBASE_DATABASE_URL: ${{ secrets.FIREBASE_DATABASE_URL }}
+          AGILESAT_APIKEY: ${{ secrets.AGILESAT_APIKEY }}
+          AGILESAT_SECRETKEY: ${{ secrets.AGILESAT_SECRETKEY }}
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-          AGILESAT_TOKEN: ${{ secrets.AGILESAT_TOKEN }}
-          AGILESAT_USUARIO: ${{ secrets.AGILESAT_USUARIO }}
-          AGILESAT_SENHA: ${{ secrets.AGILESAT_SENHA }}
+          FIREBASE_DATABASE_URL: https://frota-f2697-default-rtdb.firebaseio.com
+          AGILESAT_HORAS: ${{ github.event.inputs.horas }}
         run: python tools/agilesat_sync.py

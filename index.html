@@ -404,7 +404,7 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
         <span class="nav-label">Sair</span>
       </button>
-      <div style="text-align:center;font-size:9px;color:var(--text-faint);margin-top:8px;opacity:0.6;">build 2026-11-16-1637</div>
+      <div style="text-align:center;font-size:9px;color:var(--text-faint);margin-top:8px;opacity:0.6;">build 2026-11-16-1657</div>
     </div>
   </aside>
 
@@ -1604,8 +1604,8 @@ function detectarVisitas(silent){
 // INTEGRAÇÃO AGILESAT + SISTEMA
 // =====================================================================
 VIEWS.integracao = function(){
-  var ag = cfg('agilesat', null) || {baseUrl:'https://web-service2.ftdata.com.br', authType:'login', endpoints:{login:'/auth/login', veiculos:'/vehicles/all', posicoes:'/events/all', historico:'/events/interval/id/{id}/begin/{inicio}/end/{fim}'}, horas:3};
-  var ep = ag.endpoints || {}, us = cfg('ultimaSync', null);
+  var ag = cfg('agilesat', null) || {horas:3};
+  var us = cfg('ultimaSync', null);
   var linked = vals(DB.veiculos).filter(function(v){ return v.rastreadorId; }).length;
   var ed = can('admin');
   var dis = ed ? '' : ' disabled';
@@ -1618,29 +1618,20 @@ VIEWS.integracao = function(){
     '</div><div class="cfg-grid">' +
     '<div class="perm-note" style="grid-column:1/-1;margin:0;background:var(--teal-soft);color:var(--teal)">A integração é opcional. Tudo que o rastreador envia também pode ser lançado à mão: posição/check-in e leituras de KM (Rastreamento), viagens com hodômetro e postos visitados, visitas, abastecimentos, manutenções e pedágios, ou importado por planilha.</div>' +
     '<div class="cfg-card"><h3>Como os dados do rastreador chegam aqui</h3>' +
-      '<p>O GitHub Actions do repositório roda o conector <code>tools/agilesat_sync.py</code> de hora em hora (como o backup do Operacional). Ele lê a API da AgileSat e grava veículos, posições, viagens e visitas direto no Firebase. O token fica nos segredos do GitHub, nunca no painel.</p>' +
+      '<p>De hora em hora, o GitHub Actions do repositório roda o conector <code>tools/agilesat_sync.py</code>. Ele lê a API RESTrack da Fulltrack (plataforma da AgileSat) e grava aqui: veículos, última posição, viagens com trajeto e KM pelo hodômetro, postos (pontos de referência), motoristas e visitas aos postos. As chaves ficam nos segredos do GitHub, nunca no painel.</p>' +
       '<div class="steps">' +
-        '<div class="step"><div><b>Peça à AgileSat o acesso à API</b>: token ou usuário de integração, URL base e a documentação dos endpoints de veículos, última posição e histórico.</div></div>' +
-        '<div class="step"><div><b>Preencha os endpoints</b> ao lado e salve. O conector lê esta configuração do Firebase.</div></div>' +
-        '<div class="step"><div><b>Cadastre os segredos</b> no GitHub (Settings › Secrets › Actions): <code>AGILESAT_USUARIO</code> e <code>AGILESAT_SENHA</code> (ou <code>AGILESAT_TOKEN</code>) e <code>FIREBASE_SERVICE_ACCOUNT</code>.</div></div>' +
-        '<div class="step"><div><b>Rode uma vez</b> pela aba Actions (“Sincronizar AgileSat” › Run workflow). Depois ele roda sozinho.</div></div>' +
-        '<div class="step"><div>Em cada veículo, preencha o <b>ID do veículo no AgileSat</b>. Sem ele, o conector tenta casar pela placa.</div></div>' +
+        '<div class="step"><div><b>Segredos no GitHub</b> (repositório FROTA › Settings › Secrets › Actions): <code>AGILESAT_APIKEY</code>, <code>AGILESAT_SECRETKEY</code> e <code>FIREBASE_SERVICE_ACCOUNT</code>.</div></div>' +
+        '<div class="step"><div><b>Primeira carga</b>: aba Actions › “Sincronizar AgileSat” › Run workflow, com 24 horas (ou mais) de histórico.</div></div>' +
+        '<div class="step"><div>Depois roda sozinho. Postos novos chegam com 0 visitas por semana: ajuste a frequência em Visitas › Postos.</div></div>' +
       '</div>' +
-      '<p style="margin:14px 0 8px">Sem o GitHub Actions, dá para rodar o conector no computador e importar o arquivo gerado:</p>' +
+      '<p style="margin:14px 0 8px">Também dá para rodar o conector no computador e importar o arquivo gerado:</p>' +
       '<div class="drop" id="ag-drop">Arraste aqui o <code>agilesat_export.json</code> ou <label class="lnk" style="cursor:pointer">escolha o arquivo<input type="file" id="ag-file" accept=".json" hidden></label></div>' +
     '</div>' +
-    '<div class="cfg-card"><h3>Configuração da API AgileSat (Fulltrack)</h3><p>Já vem preenchida com a API Fulltrack (web-service2.ftdata.com.br), que exige usuário e senha de integração. Salvo no Firebase, sem senhas.' + (ed ? '' : ' Só administradores alteram.') + '</p>' +
+    '<div class="cfg-card"><h3>Ajustes da sincronização</h3><p>API: <code>ws.fulltrack2.com</code> (RESTrack). Salvo no Firebase, sem senhas.' + (ed ? '' : ' Só administradores alteram.') + '</p>' +
       '<form id="ag-form"><div class="modal-grid">' +
-        '<div class="modal-field full"><label>URL base da API</label><input name="baseUrl" placeholder="https://api.exemplo.com.br" value="'+esc(ag.baseUrl || '')+'"'+dis+'></div>' +
-        '<div class="modal-field"><label>Autenticação</label><select name="authType"'+dis+'>' + [['bearer','Token Bearer'],['header','Chave em cabeçalho'],['login','Login (usuário/senha → token)']].map(function(o){ return '<option value="'+o[0]+'"'+(ag.authType === o[0] ? ' selected' : '')+'>'+o[1]+'</option>'; }).join('') + '</select></div>' +
-        '<div class="modal-field"><label>Nome do cabeçalho (se chave)</label><input name="headerName" value="'+esc(ag.headerName || 'x-api-key')+'"'+dis+'></div>' +
-        '<div class="modal-field full"><label>Endpoint de login (se login)</label><input name="ep_login" placeholder="/api/auth/login" value="'+esc(ep.login || '')+'"'+dis+'></div>' +
-        '<div class="modal-field full"><label>Endpoint de veículos</label><input name="ep_veiculos" placeholder="/api/v1/vehicles" value="'+esc(ep.veiculos || '')+'"'+dis+'></div>' +
-        '<div class="modal-field full"><label>Endpoint de última posição</label><input name="ep_posicoes" placeholder="/api/v1/positions/last" value="'+esc(ep.posicoes || '')+'"'+dis+'></div>' +
-        '<div class="modal-field full"><label>Endpoint de histórico — use {id}, {inicio}, {fim}</label><input name="ep_historico" placeholder="/api/v1/vehicles/{id}/positions?start={inicio}&end={fim}" value="'+esc(ep.historico || '')+'"'+dis+'></div>' +
         '<div class="modal-field"><label>Horas de histórico por execução</label><input name="horas" type="number" value="'+esc(ag.horas || 3)+'"'+dis+'></div>' +
         '<div class="modal-field"><label>Limite de velocidade p/ alerta (km/h)</label><input name="limiteVel" type="number" value="'+esc(cfg('limiteVel', 110))+'"'+dis+'></div>' +
-      '</div>' + (ed ? '<div class="modal-actions" style="justify-content:flex-start"><button class="btn btn-primary" type="submit">Salvar configuração</button></div>' : '') + '</form>' +
+      '</div>' + (ed ? '<div class="modal-actions" style="justify-content:flex-start"><button class="btn btn-primary" type="submit">Salvar</button></div>' : '') + '</form>' +
     '</div></div>' +
     '<div class="cfg-card" style="margin-top:16px"><h3>Importar planilhas</h3><p>Extratos de pedágio (Sem Parar, ConectCar, Veloe), cartão combustível, leituras de KM, viagens, posições, planilhas antigas de manutenção ou relatórios exportados do AgileSat. Cada tipo tem um modelo para baixar.</p>' +
       (can('lancar') ? '<button class="btn" data-act="importar" data-col="pedagios">Importar planilha</button>' : '<span class="mono">Seu perfil não permite importar.</span>') + '</div>';
@@ -1650,9 +1641,8 @@ function bindIntegracao(){
   var f = $('#ag-form');
   if(f && can('admin')) f.addEventListener('submit', function(e){
     e.preventDefault(); var el = this.elements;
-    var ag = {baseUrl:el.baseUrl.value.trim(), authType:el.authType.value, headerName:el.headerName.value.trim(), horas:num(el.horas.value) || 3,
-      endpoints:{login:el.ep_login.value.trim(), veiculos:el.ep_veiculos.value.trim(), posicoes:el.ep_posicoes.value.trim(), historico:el.ep_historico.value.trim()}};
-    save({'config/agilesat': ag, 'config/limiteVel': num(el.limiteVel.value) || 110}, 'Alterou a configuração da AgileSat', ag.baseUrl).then(function(){ toast('Configuração salva.'); });
+    var ag = {horas:num(el.horas.value) || 3};
+    save({'config/agilesat': ag, 'config/limiteVel': num(el.limiteVel.value) || 110}, 'Alterou a configuração da AgileSat', ag.horas + ' h').then(function(){ toast('Configuração salva.'); });
   });
   var d = $('#ag-drop'); if(!d) return;
   function ler(file){ var r = new FileReader(); r.onload = function(){ try{ importarAgile(JSON.parse(r.result)); }catch(err){ toast('Arquivo inválido: não é o JSON do conector.', 'err'); } }; r.readAsText(file); }
