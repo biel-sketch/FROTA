@@ -2,12 +2,14 @@ name: Sincronizar AgileSat
 
 on:
   schedule:
-    # De hora em hora, no minuto 17
-    - cron: '17 * * * *'
+    # 2x por dia, horário de Brasília: 12h e 17h (o GitHub usa UTC: 15h e 20h).
+    # O GitHub pode atrasar alguns minutos em horários de pico.
+    - cron: '0 15 * * *'
+    - cron: '0 20 * * *'
   workflow_dispatch:
     inputs:
       horas:
-        description: 'Horas de histórico a buscar (use 24 ou mais na primeira vez)'
+        description: 'Horas de histórico a buscar (padrão 24)'
         required: false
         default: ''
 

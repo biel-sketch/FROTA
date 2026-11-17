@@ -51,7 +51,7 @@ API = "https://ws.fulltrack2.com"
 DB_URL_PADRAO = "https://frota-f2697-default-rtdb.firebaseio.com"
 RAIZ = "painel-frota"
 
-HORAS_PADRAO = 3        # janela lida a cada execução (+2h de folga)
+HORAS_PADRAO = 24       # janela lida a cada execução (+2h de folga); cobre o intervalo 17h -> 12h
 PARADA_MIN = 10         # minutos parado que encerram uma viagem
 VEL_PARADO = 3          # km/h abaixo disso conta como parado
 MAX_PONTOS = 400        # pontos de GPS guardados por viagem
@@ -394,7 +394,7 @@ def sincronizar(api, fb, horas, teste=False):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--teste", action="store_true", help="lê a API e mostra o resultado, sem gravar no Firebase")
-    ap.add_argument("--horas", type=float, default=None, help="horas de histórico (padrão 3; use 24 na primeira carga)")
+    ap.add_argument("--horas", type=float, default=None, help="horas de histórico (padrão 24)")
     a = ap.parse_args()
 
     apikey, secret = os.environ.get("AGILESAT_APIKEY", ""), os.environ.get("AGILESAT_SECRETKEY", "")
@@ -410,7 +410,7 @@ def main():
     horas = a.horas or num(os.environ.get("AGILESAT_HORAS"), 0) or HORAS_PADRAO
     if fb and a.horas is None:
         cfg = fb.get("config/agilesat") or {}
-        horas = num(cfg.get("horas"), 0) or horas
+        horas = max(num(cfg.get("horas"), 0), horas)  # nunca menos que o intervalo entre execuções
     sincronizar(api, fb, horas, a.teste)
 
 

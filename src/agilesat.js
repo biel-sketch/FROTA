@@ -2,7 +2,7 @@
 // INTEGRAÇÃO AGILESAT + SISTEMA
 // =====================================================================
 VIEWS.integracao = function(){
-  var ag = cfg('agilesat', null) || {horas:3};
+  var ag = cfg('agilesat', null) || {horas:24};
   var us = cfg('ultimaSync', null);
   var linked = vals(DB.veiculos).filter(function(v){ return v.rastreadorId; }).length;
   var ed = can('admin');
@@ -16,18 +16,18 @@ VIEWS.integracao = function(){
     '</div><div class="cfg-grid">' +
     '<div class="perm-note" style="grid-column:1/-1;margin:0;background:var(--teal-soft);color:var(--teal)">A integração é opcional. Tudo que o rastreador envia também pode ser lançado à mão: posição/check-in e leituras de KM (Rastreamento), viagens com hodômetro e postos visitados, visitas, abastecimentos, manutenções e pedágios, ou importado por planilha.</div>' +
     '<div class="cfg-card"><h3>Como os dados do rastreador chegam aqui</h3>' +
-      '<p>De hora em hora, o GitHub Actions do repositório roda o conector <code>tools/agilesat_sync.py</code>. Ele lê a API RESTrack da Fulltrack (plataforma da AgileSat) e grava aqui: veículos, última posição, viagens com trajeto e KM pelo hodômetro, postos (pontos de referência), motoristas e visitas aos postos. As chaves ficam nos segredos do GitHub, nunca no painel.</p>' +
+      '<p>Duas vezes por dia, às <b>12h e às 17h</b>, o GitHub Actions do repositório roda o conector <code>tools/agilesat_sync.py</code>. Ele lê a API RESTrack da Fulltrack (plataforma da AgileSat) e grava aqui: veículos, última posição, viagens com trajeto e KM pelo hodômetro, postos (pontos de referência), motoristas e visitas aos postos. As chaves ficam nos segredos do GitHub, nunca no painel.</p>' +
       '<div class="steps">' +
         '<div class="step"><div><b>Segredos no GitHub</b> (repositório FROTA › Settings › Secrets › Actions): <code>AGILESAT_APIKEY</code>, <code>AGILESAT_SECRETKEY</code> e <code>FIREBASE_SERVICE_ACCOUNT</code>.</div></div>' +
         '<div class="step"><div><b>Primeira carga</b>: aba Actions › “Sincronizar AgileSat” › Run workflow, com 24 horas (ou mais) de histórico.</div></div>' +
-        '<div class="step"><div>Depois roda sozinho. Postos novos chegam com 0 visitas por semana: ajuste a frequência em Visitas › Postos.</div></div>' +
+        '<div class="step"><div>Depois roda sozinho às 12h e às 17h (para puxar fora do horário: Actions › Run workflow). Postos novos chegam com 0 visitas por semana: ajuste a frequência em Visitas › Postos.</div></div>' +
       '</div>' +
       '<p style="margin:14px 0 8px">Também dá para rodar o conector no computador e importar o arquivo gerado:</p>' +
       '<div class="drop" id="ag-drop">Arraste aqui o <code>agilesat_export.json</code> ou <label class="lnk" style="cursor:pointer">escolha o arquivo<input type="file" id="ag-file" accept=".json" hidden></label></div>' +
     '</div>' +
     '<div class="cfg-card"><h3>Ajustes da sincronização</h3><p>API: <code>ws.fulltrack2.com</code> (RESTrack). Salvo no Firebase, sem senhas.' + (ed ? '' : ' Só administradores alteram.') + '</p>' +
       '<form id="ag-form"><div class="modal-grid">' +
-        '<div class="modal-field"><label>Horas de histórico por execução</label><input name="horas" type="number" value="'+esc(ag.horas || 3)+'"'+dis+'></div>' +
+        '<div class="modal-field"><label>Horas de histórico por execução (mín. 24)</label><input name="horas" type="number" value="'+esc(ag.horas || 24)+'"'+dis+'></div>' +
         '<div class="modal-field"><label>Limite de velocidade p/ alerta (km/h)</label><input name="limiteVel" type="number" value="'+esc(cfg('limiteVel', 110))+'"'+dis+'></div>' +
       '</div>' + (ed ? '<div class="modal-actions" style="justify-content:flex-start"><button class="btn btn-primary" type="submit">Salvar</button></div>' : '') + '</form>' +
     '</div></div>' +
@@ -39,7 +39,7 @@ function bindIntegracao(){
   var f = $('#ag-form');
   if(f && can('admin')) f.addEventListener('submit', function(e){
     e.preventDefault(); var el = this.elements;
-    var ag = {horas:num(el.horas.value) || 3};
+    var ag = {horas:Math.max(24, num(el.horas.value) || 24)};
     save({'config/agilesat': ag, 'config/limiteVel': num(el.limiteVel.value) || 110}, 'Alterou a configuração da AgileSat', ag.horas + ' h').then(function(){ toast('Configuração salva.'); });
   });
   var d = $('#ag-drop'); if(!d) return;
