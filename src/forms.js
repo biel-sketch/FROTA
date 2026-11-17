@@ -250,7 +250,7 @@ function brDate(s, comHora){
 }
 function abrirImportacao(col){
   col = col || 'pedagios';
-  var opts = Object.keys(SCHEMA).map(function(k){ return '<option value="'+k+'"'+(k === col ? ' selected' : '')+'>'+SCHEMA[k].label.charAt(0).toUpperCase() + SCHEMA[k].label.slice(1)+'</option>'; }).join('');
+  var opts = Object.keys(SCHEMA).filter(function(k){ return canEdit(k); }).map(function(k){ return '<option value="'+k+'"'+(k === col ? ' selected' : '')+'>'+SCHEMA[k].label.charAt(0).toUpperCase() + SCHEMA[k].label.slice(1)+'</option>'; }).join('');
   openModal('<div class="modal-title">Importar planilha</div><div class="modal-sub">Excel (.xlsx) ou CSV. A primeira linha deve ter os nomes das colunas iguais aos do modelo. Use a coluna <code>placa</code> para ligar ao veículo e <code>posto</code> para ligar ao posto.</div>' +
     '<div class="modal-grid"><div class="modal-field"><label>O que vai importar</label><select id="imp-col">'+opts+'</select></div><div class="modal-field"><label>&nbsp;</label><button class="btn" id="imp-modelo" type="button">Baixar modelo</button></div>' +
     '<div class="modal-field full"><label>Arquivo</label><input type="file" id="imp-file" accept=".xlsx,.xls,.csv"></div></div><div id="imp-out" style="font-size:12.5px;color:var(--text-dim);margin-top:12px"></div>' +

@@ -21,7 +21,7 @@ var MODULES = [
   {id:'cadastros', label:'Cadastros', subs:[
     {id:'veiculos', label:'Veículos', view:'veiculos'},
     {id:'motoristas', label:'Motoristas', view:'motoristas'},
-    {id:'integracao', label:'Integração AgileSat e importação', view:'integracao'},
+    {id:'integracao', label:'Integração AgileSat e importação', view:'integracao', admin:true},
     {id:'sistema', label:'Sistema', view:'sistema', admin:true}]}
 ];
 var curMod = 'inicio', curSub = 'resumo', curView = 'resumo', renderQueued = false, modalRefresh = null, selTrip = null;
@@ -237,6 +237,7 @@ function canEdit(col){
   return can('lancar');
 }
 function newBtn(col, label){ return canEdit(col) ? '<button class="btn btn-primary" data-act="novo" data-col="'+col+'">+ '+label+'</button>' : ''; }
+function impBtn(col){ return canEdit(col) ? '<button class="btn" data-act="importar" data-col="'+col+'">Importar Excel</button>' : ''; }
 function exportBtn(key){ return '<button class="btn" data-act="exportar" data-key="'+key+'">Exportar Excel</button>'; }
 function pill(cls, txt){ return '<span class="pill '+cls+'">'+esc(txt)+'</span>'; }
 function docPill(iso){ var d = daysUntil(iso); if(d == null) return '<span class="mono">—</span>'; if(d < 0) return pill('red', 'Vencido ' + fmtD(iso)); if(d <= 30) return pill('amber', fmtD(iso)); return '<span class="mono">'+fmtD(iso)+'</span>'; }
@@ -427,7 +428,7 @@ VIEWS.abastecimentos = function(){
       {l:'Total', n:1, f:function(a){ return fmtR(a.valor); }},
       {l:'Hodômetro', n:1, f:function(a){ return fmtN(a.km); }}
     ], rows, {acts:function(a){ return acts('abastecimentos', a._id); }}));
-  return {html:html, actions: exportBtn('abastecimentos') + newBtn('abastecimentos', 'Abastecimento')};
+  return {html:html, actions: exportBtn('abastecimentos') + impBtn('abastecimentos') + newBtn('abastecimentos', 'Abastecimento')};
 };
 
 VIEWS.consumo = function(){
@@ -495,7 +496,7 @@ VIEWS.manutencoes = function(){
     ], rows, {acts:function(m){ return acts('manutencoes', m._id); }})) +
     panel('Custo por veículo', bars(porV, fmtR, 'blue')) +
     '</div>';
-  return {html:html, actions: exportBtn('manutencoes') + newBtn('manutencoes', 'Manutenção')};
+  return {html:html, actions: exportBtn('manutencoes') + impBtn('manutencoes') + newBtn('manutencoes', 'Manutenção')};
 };
 
 VIEWS.pedagios = function(){
@@ -513,7 +514,7 @@ VIEWS.pedagios = function(){
       {l:'Praça', k:'praca'}, {l:'Rodovia', k:'rodovia'}, {l:'Pagamento', k:'origem'},
       {l:'Valor', n:1, f:function(p){ return fmtR(p.valor); }}
     ], rows, {acts:function(p){ return acts('pedagios', p._id); }}), '', 'importe o extrato do Sem Parar / ConectCar / Veloe em Cadastros › Integração');
-  return {html:html, actions: exportBtn('pedagios') + newBtn('pedagios', 'Pedágio')};
+  return {html:html, actions: exportBtn('pedagios') + impBtn('pedagios') + newBtn('pedagios', 'Pedágio')};
 };
 
 VIEWS.visitas = function(){

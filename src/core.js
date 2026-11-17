@@ -27,12 +27,13 @@ var DB_ROOT = 'painel-frota';
 var rolePermissions = {
   administrador: {label:'Administrador',   initials:'AD', lancar:true,  manutencao:true,  cadastros:true,  excluir:true,  admin:true},
   gestor:        {label:'Gestor de frota', initials:'GF', lancar:true,  manutencao:true,  cadastros:true,  excluir:true,  admin:false},
-  operador:      {label:'Operador',        initials:'OP', lancar:true,  manutencao:false, cadastros:false, excluir:false, admin:false},
+  operador:      {label:'Operador',        initials:'OP', lancar:true,  manutencao:true,  cadastros:false, excluir:false, admin:false},
   consulta:      {label:'Consulta',        initials:'CO', lancar:false, manutencao:false, cadastros:false, excluir:false, admin:false}
 };
 var USER_ROLES = [
   {user:'gabriel', email:'gabriel@loginserv.com.br', name:'Gabriel', role:'administrador'},
-  {user:'carol',   email:'carol@loginserv.com.br',   name:'Carol',   role:'administrador'}
+  {user:'carol',   email:'carol@loginserv.com.br',   name:'Carol',   role:'administrador'},
+  {user:'joao',    email:'financeiro.2@loginserv.com.br', name:'João Vitor', role:'operador'}
 ];
 
 // =====================================================================

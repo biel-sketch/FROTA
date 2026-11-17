@@ -53,7 +53,7 @@ function bindIntegracao(){
 // mesmo formato que o conector grava no Firebase
 function chaveSegura(s){ return String(s).replace(/[.#$\[\]\/]/g, '_').slice(0, 180); }
 function importarAgile(json){
-  if(!can('lancar')){ toast('Seu perfil não permite importar.', 'err'); return; }
+  if(!can('admin')){ toast('Seu perfil não permite importar.', 'err'); return; }
   var p = {}, veic = vals(DB.veiculos), novos = 0, at = 0, np = 0, nt = 0;
   function acha(rid, pl){ return veic.find(function(v){ return (rid != null && rid !== '' && String(v.rastreadorId) === String(rid)) || (pl && normPlaca(v.placa) === normPlaca(pl)); }); }
   (json.veiculos || []).forEach(function(x){
@@ -86,7 +86,7 @@ VIEWS.sistema = function(){
   var html = '<div class="cfg-grid">' +
     '<div class="cfg-card"><h3>Usuários e perfis</h3><p>Os usuários ficam em <code>USER_ROLES</code> no início do <code>src/core.js</code>, com o e-mail cadastrado no Firebase Authentication. As senhas são do Firebase.</p>' +
       table([{l:'Usuário', k:'user'}, {l:'Nome', k:'name'}, {l:'E-mail', k:'email'}, {l:'Perfil', f:function(u){ return pill('gray', (rolePermissions[u.role] || {}).label || u.role); }}], USER_ROLES) +
-      '<p style="margin-top:12px"><b style="color:var(--text)">Perfis:</b> Administrador (tudo), Gestor de frota (lança, cadastra e exclui), Operador (lança abastecimentos, pedágios, viagens e visitas) e Consulta (só vê).</p></div>' +
+      '<p style="margin-top:12px"><b style="color:var(--text)">Perfis:</b> Administrador (tudo, inclusive a integração), Gestor de frota (lança, cadastra e exclui), Operador (lança e importa abastecimentos, manutenções, pedágios, KM, viagens e visitas; não cadastra, não exclui e não acessa a integração) e Consulta (só vê).</p></div>' +
     '<div class="cfg-card"><h3>Dados</h3><p>Banco: Firebase Realtime Database, nó <code>' + DB_ROOT + '</code>' + (FB_ON ? '' : ' (modo demonstração: dados só neste navegador)') + '.</p>' +
       '<div class="toolbar"><button class="btn" data-act="backup">Baixar backup (JSON)</button></div>' +
       '<p style="margin-top:6px">Dados de exemplo: 5 veículos fictícios com abastecimentos, manutenções, pedágios, viagens com GPS e visitas, para treinar a equipe.</p>' +
