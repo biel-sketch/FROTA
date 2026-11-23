@@ -55,7 +55,7 @@
   /* mapas Leaflet */
   .map-wrap{position:relative;padding:14px 18px 0;}
   .map-big{height:560px;border-radius:10px;border:1px solid var(--line);background:#0D1526;}
-  .map-full-btn{position:absolute;top:24px;left:66px;z-index:500;}
+  .map-full-btn{position:absolute;top:24px;left:66px;z-index:500;background:#0B1220 !important;color:#EAF0FA !important;border:1px solid #2DD4BF !important;box-shadow:0 2px 8px rgba(0,0,0,.35);}
   .map-wrap.map-full{position:fixed;inset:0;z-index:2000;background:var(--bg);padding:0;}
   .map-wrap.map-full .map-big{height:100vh;border-radius:0;border:0;}
   .map-wrap.map-full .map-full-btn{top:12px;left:56px;}

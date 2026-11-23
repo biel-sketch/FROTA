@@ -328,7 +328,7 @@
   /* mapas Leaflet */
   .map-wrap{position:relative;padding:14px 18px 0;}
   .map-big{height:560px;border-radius:10px;border:1px solid var(--line);background:#0D1526;}
-  .map-full-btn{position:absolute;top:24px;left:66px;z-index:500;}
+  .map-full-btn{position:absolute;top:24px;left:66px;z-index:500;background:#0B1220 !important;color:#EAF0FA !important;border:1px solid #2DD4BF !important;box-shadow:0 2px 8px rgba(0,0,0,.35);}
   .map-wrap.map-full{position:fixed;inset:0;z-index:2000;background:var(--bg);padding:0;}
   .map-wrap.map-full .map-big{height:100vh;border-radius:0;border:0;}
   .map-wrap.map-full .map-full-btn{top:12px;left:56px;}
@@ -421,7 +421,7 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
         <span class="nav-label">Sair</span>
       </button>
-      <div style="text-align:center;font-size:9px;color:var(--text-faint);margin-top:8px;opacity:0.6;">build 2026-11-23-0928</div>
+      <div style="text-align:center;font-size:9px;color:var(--text-faint);margin-top:8px;opacity:0.6;">build 2026-11-23-0930</div>
     </div>
   </aside>
 
@@ -1354,8 +1354,8 @@ VIEWS.motoristas = function(){
 var MAPA = null, ENDERECOS = {};
 
 function camadasBase(){
-  var ruas = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-    maxZoom:20, subdomains:'abcd', attribution:'&copy; OpenStreetMap &copy; CARTO'});
+  var ruas = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom:19, attribution:'&copy; OpenStreetMap'});
   var sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
     maxZoom:19, attribution:'Imagens &copy; Esri'});
   var nomes = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}', {maxZoom:19});
