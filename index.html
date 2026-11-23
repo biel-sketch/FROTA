@@ -421,7 +421,7 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
         <span class="nav-label">Sair</span>
       </button>
-      <div style="text-align:center;font-size:9px;color:var(--text-faint);margin-top:8px;opacity:0.6;">build 2026-11-23-1001</div>
+      <div style="text-align:center;font-size:9px;color:var(--text-faint);margin-top:8px;opacity:0.6;">build 2026-11-23-1004</div>
     </div>
   </aside>
 
@@ -1624,6 +1624,7 @@ function onAction(e){
   if(a === 'editar'){ openForm(t.dataset.col, t.dataset.id); return; }
   if(a === 'excluir'){
     var col = t.dataset.col, id = t.dataset.id, r = DB[col][id] || {};
+    if(col === 'veiculos'){ excluirVeiculo(id, r); return; }
     confirmBox('Excluir ' + SCHEMA[col].label, 'Excluir <b>' + esc(descRec(col, r)) + '</b>? Não dá para desfazer.', 'Excluir', function(){
       var p = {}; p[col + '/' + id] = null;
       if(col === 'veiculos') p['posicoes/' + id] = null;
@@ -1799,6 +1800,25 @@ function detectarVisitas(silent){
   return save(p, 'Detectou visitas pelas rotas', novos.length + ' visita(s)').then(function(){ if(!silent) toast(novos.length + ' visita(s) registrada(s).'); return novos.length; });
 }
 
+// Excluir veículo leva junto tudo que é dele e, se veio do rastreador, para de puxar
+function excluirVeiculo(id, r){
+  var p = {}, cont = {}, nomes = {viagens:'viagens', visitas:'visitas', abastecimentos:'abastecimentos', manutencoes:'manutenções', pedagios:'pedágios', leituras:'leituras de KM', posicoes:'posição'};
+  Object.keys(DB).forEach(function(c){
+    var o = DB[c]; if(!o || typeof o !== 'object' || c === 'veiculos' || c === 'config' || c === 'logs') return;
+    Object.keys(o).forEach(function(k){ var x = o[k]; if(x && typeof x === 'object' && x.veiculoId === id){ p[c + '/' + k] = null; cont[c] = (cont[c] || 0) + 1; } });
+  });
+  p['veiculos/' + id] = null; p['posicoes/' + id] = null;
+  if(r.rastreadorId) p['config/rastreadorIgnorar/' + r.rastreadorId] = r.placa || '';
+  var lista = Object.keys(cont).map(function(c){ return cont[c] + ' ' + (nomes[c] || c); }).join(', ');
+  confirmBox('Excluir veículo', 'Excluir <b>' + esc(descRec('veiculos', r)) + '</b>' + (lista ? ' e todos os dados dele (' + lista + ')' : '') + '?' +
+    (r.rastreadorId ? '<br><br>O rastreador deste carro também deixa de ser puxado (dá para voltar em Cadastros › Integração).' : '') + '<br>Não dá para desfazer.', 'Excluir', function(){
+    return save(p, 'Excluiu veículo', descRec('veiculos', r) + (lista ? ' + ' + lista : '')).then(function(){ toast('Veículo e dados excluídos.'); });
+  });
+}
+function voltarPuxar(rid){
+  save((function(){ var o = {}; o['config/rastreadorIgnorar/' + rid] = null; return o; })(), 'Voltou a puxar veículo do rastreador', rid).then(function(){ toast('Na próxima atualização ele volta a ser puxado.'); });
+}
+
 // =====================================================================
 // INTEGRAÇÃO AGILESAT + SISTEMA
 // =====================================================================
@@ -1826,6 +1846,9 @@ VIEWS.integracao = function(){
       '<p style="margin:14px 0 8px">Também dá para rodar o conector no computador e importar o arquivo gerado:</p>' +
       '<div class="drop" id="ag-drop">Arraste aqui o <code>agilesat_export.json</code> ou <label class="lnk" style="cursor:pointer">escolha o arquivo<input type="file" id="ag-file" accept=".json" hidden></label></div>' +
     '</div>' +
+    (function(){ var ig = cfg('rastreadorIgnorar', null) || {}, ks = Object.keys(ig); if(!ks.length) return '';
+      return '<div class="cfg-card"><h3>Veículos que não são puxados</h3><p>Foram excluídos do painel; o rastreador deles é ignorado na sincronização.</p>' +
+        ks.map(function(k){ return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-top:1px solid var(--line)"><span><b>' + esc(ig[k] || '—') + '</b> <span class="mono" style="color:var(--muted)">ID ' + esc(k) + '</span></span>' + (ed ? '<button class="btn btn-sm" type="button" onclick="voltarPuxar(\'' + esc(k) + '\')">Voltar a puxar</button>' : '') + '</div>'; }).join('') + '</div>'; })() +
     '<div class="cfg-card"><h3>Ajustes da sincronização</h3><p>API: <code>ws.fulltrack2.com</code> (RESTrack). Salvo no Firebase, sem senhas.' + (ed ? '' : ' Só administradores alteram.') + '</p>' +
       '<form id="ag-form"><div class="modal-grid">' +
         '<div class="modal-field"><label>Horas de histórico por execução (mín. 24)</label><input name="horas" type="number" value="'+esc(ag.horas || 24)+'"'+dis+'></div>' +

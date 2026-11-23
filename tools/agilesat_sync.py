@@ -270,6 +270,8 @@ def sincronizar(api, fb, horas, teste=False):
     cad = (fb.get("veiculos") if fb else {}) or {}
     postos = (fb.get("postos") if fb else {}) or {}
     motoristas = (fb.get("motoristas") if fb else {}) or {}
+    ignorar = (fb.get("config/rastreadorIgnorar") if fb else {}) or {}
+    ign_placas = {norm_placa(p) for p in ignorar.values() if p}
     paths, cont = {}, {"novos": 0, "pos": 0, "viagens": 0, "postos": 0, "mot": 0}
 
     def acha(rid, placa):
@@ -287,6 +289,9 @@ def sincronizar(api, fb, horas, teste=False):
         rid, placa = str(x.get("ras_vei_id")), x.get("ras_vei_placa")
         ev = ultimos.get(rid, {})
         km = num(ev.get("ras_eve_hodometro"), 0) / 1000.0
+        if rid in ignorar or (placa and norm_placa(placa) in ign_placas):
+            cont["ignorados"] = cont.get("ignorados", 0) + 1
+            continue
         vid, v = acha(rid, placa)
         if vid and str(v.get("puxarRastreador", "Sim")) == "Não":
             paths[f"posicoes/{vid}"] = None  # tira do mapa da frota

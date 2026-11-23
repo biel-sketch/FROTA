@@ -25,6 +25,9 @@ VIEWS.integracao = function(){
       '<p style="margin:14px 0 8px">Também dá para rodar o conector no computador e importar o arquivo gerado:</p>' +
       '<div class="drop" id="ag-drop">Arraste aqui o <code>agilesat_export.json</code> ou <label class="lnk" style="cursor:pointer">escolha o arquivo<input type="file" id="ag-file" accept=".json" hidden></label></div>' +
     '</div>' +
+    (function(){ var ig = cfg('rastreadorIgnorar', null) || {}, ks = Object.keys(ig); if(!ks.length) return '';
+      return '<div class="cfg-card"><h3>Veículos que não são puxados</h3><p>Foram excluídos do painel; o rastreador deles é ignorado na sincronização.</p>' +
+        ks.map(function(k){ return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-top:1px solid var(--line)"><span><b>' + esc(ig[k] || '—') + '</b> <span class="mono" style="color:var(--muted)">ID ' + esc(k) + '</span></span>' + (ed ? '<button class="btn btn-sm" type="button" onclick="voltarPuxar(\'' + esc(k) + '\')">Voltar a puxar</button>' : '') + '</div>'; }).join('') + '</div>'; })() +
     '<div class="cfg-card"><h3>Ajustes da sincronização</h3><p>API: <code>ws.fulltrack2.com</code> (RESTrack). Salvo no Firebase, sem senhas.' + (ed ? '' : ' Só administradores alteram.') + '</p>' +
       '<form id="ag-form"><div class="modal-grid">' +
         '<div class="modal-field"><label>Horas de histórico por execução (mín. 24)</label><input name="horas" type="number" value="'+esc(ag.horas || 24)+'"'+dis+'></div>' +

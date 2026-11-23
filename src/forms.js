@@ -158,6 +158,7 @@ function onAction(e){
   if(a === 'editar'){ openForm(t.dataset.col, t.dataset.id); return; }
   if(a === 'excluir'){
     var col = t.dataset.col, id = t.dataset.id, r = DB[col][id] || {};
+    if(col === 'veiculos'){ excluirVeiculo(id, r); return; }
     confirmBox('Excluir ' + SCHEMA[col].label, 'Excluir <b>' + esc(descRec(col, r)) + '</b>? Não dá para desfazer.', 'Excluir', function(){
       var p = {}; p[col + '/' + id] = null;
       if(col === 'veiculos') p['posicoes/' + id] = null;
@@ -331,4 +332,23 @@ function detectarVisitas(silent){
   if(!novos.length){ if(!silent) toast('Nenhuma visita nova encontrada nas rotas.'); return Promise.resolve(0); }
   var p = {}; novos.forEach(function(v){ v.atualizadoEm = nowTs(); p['visitas/' + store.key()] = v; });
   return save(p, 'Detectou visitas pelas rotas', novos.length + ' visita(s)').then(function(){ if(!silent) toast(novos.length + ' visita(s) registrada(s).'); return novos.length; });
+}
+
+// Excluir veículo leva junto tudo que é dele e, se veio do rastreador, para de puxar
+function excluirVeiculo(id, r){
+  var p = {}, cont = {}, nomes = {viagens:'viagens', visitas:'visitas', abastecimentos:'abastecimentos', manutencoes:'manutenções', pedagios:'pedágios', leituras:'leituras de KM', posicoes:'posição'};
+  Object.keys(DB).forEach(function(c){
+    var o = DB[c]; if(!o || typeof o !== 'object' || c === 'veiculos' || c === 'config' || c === 'logs') return;
+    Object.keys(o).forEach(function(k){ var x = o[k]; if(x && typeof x === 'object' && x.veiculoId === id){ p[c + '/' + k] = null; cont[c] = (cont[c] || 0) + 1; } });
+  });
+  p['veiculos/' + id] = null; p['posicoes/' + id] = null;
+  if(r.rastreadorId) p['config/rastreadorIgnorar/' + r.rastreadorId] = r.placa || '';
+  var lista = Object.keys(cont).map(function(c){ return cont[c] + ' ' + (nomes[c] || c); }).join(', ');
+  confirmBox('Excluir veículo', 'Excluir <b>' + esc(descRec('veiculos', r)) + '</b>' + (lista ? ' e todos os dados dele (' + lista + ')' : '') + '?' +
+    (r.rastreadorId ? '<br><br>O rastreador deste carro também deixa de ser puxado (dá para voltar em Cadastros › Integração).' : '') + '<br>Não dá para desfazer.', 'Excluir', function(){
+    return save(p, 'Excluiu veículo', descRec('veiculos', r) + (lista ? ' + ' + lista : '')).then(function(){ toast('Veículo e dados excluídos.'); });
+  });
+}
+function voltarPuxar(rid){
+  save((function(){ var o = {}; o['config/rastreadorIgnorar/' + rid] = null; return o; })(), 'Voltou a puxar veículo do rastreador', rid).then(function(){ toast('Na próxima atualização ele volta a ser puxado.'); });
 }
