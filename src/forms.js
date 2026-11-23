@@ -6,7 +6,8 @@ var SCHEMA = {
     {k:'placa', l:'Placa', req:1}, {k:'modelo', l:'Modelo'}, {k:'ano', l:'Ano', t:'number'},
     {k:'tipo', l:'Tipo', t:'select', opts:['Carro','Utilitário','Van','Caminhão','Moto']},
     {k:'combustivel', l:'Combustível', t:'select', opts:['Flex','Gasolina','Etanol','Diesel S10','Diesel S500','GNV','Elétrico']},
-    {k:'kmAtual', l:'Hodômetro atual (km)', t:'number'}, {k:'metaConsumo', l:'Meta de consumo (km/l)', t:'number', step:'0.1'},
+    {k:'kmAtual', l:'Hodômetro atual (km)', t:'number'}, {k:'metaConsumo', l:'Consumo médio (km/l)', t:'number', step:'0.1', hint:'Usado para calcular o combustível.'},
+    {k:'abasteceCom', l:'Abastece com (se flex)', t:'select', opts:['Gasolina','Etanol']}, {k:'precoLitro', l:'Preço do litro (R$), opcional', t:'number', step:'0.01', hint:'Em branco: usa o último abastecimento ou o preço geral.'},
     {k:'motorista', l:'Motorista principal', t:'motorista'}, {k:'rastreadorId', l:'ID do veículo no AgileSat (opcional)'},
     {k:'vencLicenciamento', l:'Vencimento do licenciamento', t:'date'}, {k:'vencSeguro', l:'Vencimento do seguro', t:'date'},
     {k:'status', l:'Status', t:'select', opts:['Ativo','Em manutenção','Parado']}]},
@@ -170,6 +171,7 @@ function onAction(e){
   if(a === 'demo-carregar'){ carregarDemo(); return; }
   if(a === 'demo-remover'){ removerDemo(); return; }
   if(a === 'backup'){ baixarBackup(); return; }
+  if(a === 'atualizar'){ atualizarAgora(); return; }
 }
 
 function usarLocalizacao(modo){

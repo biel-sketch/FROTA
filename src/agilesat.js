@@ -16,11 +16,11 @@ VIEWS.integracao = function(){
     '</div><div class="cfg-grid">' +
     '<div class="perm-note" style="grid-column:1/-1;margin:0;background:var(--teal-soft);color:var(--teal)">A integração é opcional. Tudo que o rastreador envia também pode ser lançado à mão: posição/check-in e leituras de KM (Rastreamento), viagens com hodômetro e postos visitados, visitas, abastecimentos, manutenções e pedágios, ou importado por planilha.</div>' +
     '<div class="cfg-card"><h3>Como os dados do rastreador chegam aqui</h3>' +
-      '<p>Duas vezes por dia, às <b>12h e às 17h</b>, o GitHub Actions do repositório roda o conector <code>tools/agilesat_sync.py</code>. Ele lê a API RESTrack da Fulltrack (plataforma da AgileSat) e grava aqui: veículos, última posição, viagens com trajeto e KM pelo hodômetro, postos (pontos de referência), motoristas e visitas aos postos. As chaves ficam nos segredos do GitHub, nunca no painel.</p>' +
+      '<p>Três vezes por dia, às <b>8h, 12h e 17h</b> (ou na hora, pelo botão “Atualizar” no topo), o GitHub Actions do repositório roda o conector <code>tools/agilesat_sync.py</code>. Ele lê a API RESTrack da Fulltrack (plataforma da AgileSat) e grava aqui: veículos, última posição, viagens com trajeto e KM pelo hodômetro, postos (pontos de referência), motoristas e visitas aos postos. As chaves ficam nos segredos do GitHub, nunca no painel.</p>' +
       '<div class="steps">' +
         '<div class="step"><div><b>Segredos no GitHub</b> (repositório FROTA › Settings › Secrets › Actions): <code>AGILESAT_APIKEY</code>, <code>AGILESAT_SECRETKEY</code> e <code>FIREBASE_SERVICE_ACCOUNT</code>.</div></div>' +
         '<div class="step"><div><b>Primeira carga</b>: aba Actions › “Sincronizar AgileSat” › Run workflow, com 24 horas (ou mais) de histórico.</div></div>' +
-        '<div class="step"><div>Depois roda sozinho às 12h e às 17h (para puxar fora do horário: Actions › Run workflow). Postos novos chegam com 0 visitas por semana: ajuste a frequência em Visitas › Postos.</div></div>' +
+        '<div class="step"><div>Depois roda sozinho às 8h, 12h e 17h. Fora do horário, use o botão “Atualizar dados do rastreador” no topo do painel. Postos novos chegam com 0 visitas por semana: ajuste a frequência em Visitas › Postos.</div></div>' +
       '</div>' +
       '<p style="margin:14px 0 8px">Também dá para rodar o conector no computador e importar o arquivo gerado:</p>' +
       '<div class="drop" id="ag-drop">Arraste aqui o <code>agilesat_export.json</code> ou <label class="lnk" style="cursor:pointer">escolha o arquivo<input type="file" id="ag-file" accept=".json" hidden></label></div>' +
@@ -87,6 +87,8 @@ VIEWS.sistema = function(){
     '<div class="cfg-card"><h3>Usuários e perfis</h3><p>Os usuários ficam em <code>USER_ROLES</code> no início do <code>src/core.js</code>, com o e-mail cadastrado no Firebase Authentication. As senhas são do Firebase.</p>' +
       table([{l:'Usuário', k:'user'}, {l:'Nome', k:'name'}, {l:'E-mail', k:'email'}, {l:'Perfil', f:function(u){ return pill('gray', (rolePermissions[u.role] || {}).label || u.role); }}], USER_ROLES) +
       '<p style="margin-top:12px"><b style="color:var(--text)">Perfis:</b> Administrador (tudo, inclusive a integração), Gestor de frota (lança, cadastra e exclui), Operador (lança e importa abastecimentos, manutenções, pedágios, KM, viagens e visitas; não cadastra, não exclui e não acessa a integração) e Consulta (só vê).</p></div>' +
+    '<div class="cfg-card"><h3>Botão “Atualizar dados do rastreador”</h3><p>O botão no topo do painel dispara a sincronização no GitHub na hora. Ele precisa de um token do GitHub que só consiga rodar os workflows do repositório FROTA. ' + (cfg('githubToken', '') ? '<b style="color:var(--teal)">Token configurado.</b>' : '<b style="color:var(--amber)">Token ainda não configurado.</b>') + '</p>' +
+      '<form id="gh-form"><div class="modal-grid"><div class="modal-field full"><label>Token do GitHub (fine-grained)</label><input name="tok" type="password" autocomplete="off" placeholder="github_pat_..."></div></div><div class="modal-actions" style="justify-content:flex-start"><button class="btn btn-primary" type="submit">Salvar token</button>' + (cfg('githubToken', '') ? ' <button class="btn btn-danger" type="button" id="gh-del">Remover</button>' : '') + '</div></form></div>' +
     '<div class="cfg-card"><h3>Dados</h3><p>Banco: Firebase Realtime Database, nó <code>' + DB_ROOT + '</code>' + (FB_ON ? '' : ' (modo demonstração: dados só neste navegador)') + '.</p>' +
       '<div class="toolbar"><button class="btn" data-act="backup">Baixar backup (JSON)</button></div>' +
       '<p style="margin-top:6px">Dados de exemplo: 5 veículos fictícios com abastecimentos, manutenções, pedágios, viagens com GPS e visitas, para treinar a equipe.</p>' +
@@ -95,7 +97,12 @@ VIEWS.sistema = function(){
     panel('Log de auditoria', table([
       {l:'Quando', f:function(l){ return '<span class="mono">' + fmtDT(l.ts) + '</span>'; }}, {l:'Usuário', k:'usuario'}, {l:'Ação', k:'acao'}, {l:'Detalhe', k:'detalhe'}
     ], logs, {empty:'Nenhuma ação registrada ainda.'}), '', 'últimas 150 ações');
-  return {html:html};
+  return {html:html, after:function(){
+    var f = $('#gh-form'); if(!f) return;
+    f.addEventListener('submit', function(e){ e.preventDefault(); var t = f.elements.tok.value.trim(); if(!/^(github_pat_|ghp_)/.test(t)){ toast('Cole um token do GitHub (começa com github_pat_).', 'err'); return; }
+      save({'config/githubToken': t}, 'Configurou o token do botão Atualizar', '').then(function(){ toast('Token salvo. O botão Atualizar já funciona.'); }); });
+    var d = $('#gh-del'); if(d) d.addEventListener('click', function(){ save({'config/githubToken': null}, 'Removeu o token do botão Atualizar', '').then(function(){ toast('Token removido.'); }); });
+  }};
 };
 function baixarBackup(){
   var o = {}; COLS.forEach(function(c){ o[c] = DB[c]; });
@@ -123,4 +130,30 @@ function removerDemo(){
     COLS.forEach(function(c){ Object.keys(DB[c] || {}).forEach(function(id){ var r = DB[c][id]; if(r && r.demo){ p[c + '/' + id] = null; n++; } }); });
     return save(p, 'Removeu dados de exemplo', n + ' registros').then(function(){ toast(n + ' registros de exemplo removidos.'); });
   });
+}
+
+// =====================================================================
+// BOTÃO "ATUALIZAR AGORA": dispara o workflow do GitHub Actions
+// =====================================================================
+var GH_REPO = 'biel-sketch/FROTA', GH_WORKFLOW = 'agilesat-sync.yml', atualizando = null;
+function syncInfo(){
+  var us = cfg('ultimaSync', null), el = $('#sync-info'), b = $('#btn-atualizar'); if(!el) return;
+  b.style.display = can('lancar') ? '' : 'none';
+  if(atualizando && us && us.em > atualizando){ atualizando = null; toast('Dados do rastreador atualizados: ' + (us.resumo || '')); }
+  if(atualizando && Date.now() - atualizando > 8 * 60000){ atualizando = null; toast('A atualização está demorando. Confira mais tarde em Cadastros › Integração.', 'err'); }
+  b.disabled = !!atualizando; b.textContent = atualizando ? '⟳ Atualizando...' : '⟳ Atualizar dados do rastreador';
+  el.textContent = us && us.em ? 'Rastreador: ' + fmtDT(us.em) : '';
+}
+function atualizarAgora(){
+  var tok = cfg('githubToken', '');
+  if(!tok){ toast(can('admin') ? 'Configure o token do GitHub em Cadastros › Sistema.' : 'Botão ainda não configurado. Peça ao administrador.', 'err'); return; }
+  atualizando = Date.now(); syncInfo();
+  fetch('https://api.github.com/repos/' + GH_REPO + '/actions/workflows/' + GH_WORKFLOW + '/dispatches', {
+    method:'POST', headers:{'Accept':'application/vnd.github+json', 'Authorization':'Bearer ' + tok, 'X-GitHub-Api-Version':'2022-11-28'},
+    body: JSON.stringify({ref:'main'})
+  }).then(function(r){
+    if(r.status === 204){ toast('Atualização iniciada. Leva cerca de 1 minuto.'); save({}, 'Pediu atualização do rastreador', ''); return; }
+    atualizando = null; syncInfo();
+    toast(r.status === 401 || r.status === 403 || r.status === 404 ? 'O token do GitHub foi recusado. Gere um novo em Cadastros › Sistema.' : 'Não foi possível iniciar a atualização (erro ' + r.status + ').', 'err');
+  }, function(){ atualizando = null; syncInfo(); toast('Sem conexão com o GitHub.', 'err'); });
 }

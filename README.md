@@ -38,7 +38,7 @@ Sem a configuração, o painel roda em **modo demonstração** (senha `demo`, da
 ## Integração AgileSat (automática)
 A AgileSat usa a plataforma Fulltrack. A API usada é a **RESTrack** (`https://ws.fulltrack2.com`, documentação em `/apidoc/`), autenticada pelos cabeçalhos `apiKey` e `secretKey`. Ela não permite chamada direta do navegador (CORS), por isso a sincronização roda no GitHub Actions.
 
-O workflow `.github/workflows/agilesat-sync.yml` roda `tools/agilesat_sync.py` duas vezes por dia, às 12h e às 17h (Brasília), lendo as últimas 26 horas e grava no Firebase:
+O workflow `.github/workflows/agilesat-sync.yml` roda `tools/agilesat_sync.py` três vezes por dia, às 8h, 12h e 17h (Brasília), lendo as últimas 26 horas. O botão “Atualizar dados do rastreador”, no topo do painel, dispara a mesma sincronização na hora (precisa de um token fine-grained do GitHub, configurado em Cadastros › Sistema) e grava no Firebase:
 - **veículos** (`/vehicles/all`), casando pelo ID do AgileSat ou pela placa; hodômetro em metros, convertido para km;
 - **última posição** (`/events/all`), com horários convertidos de UTC para Brasília;
 - **viagens** (`/events/interval/id/{id}/begin/{ts}/end/{ts}`), com KM pelo hodômetro, velocidade máxima, tempo parado e trajeto;
