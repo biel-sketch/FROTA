@@ -10,7 +10,8 @@ var SCHEMA = {
     {k:'abasteceCom', l:'Abastece com (se flex)', t:'select', opts:['Gasolina','Etanol']}, {k:'precoLitro', l:'Preço do litro (R$), opcional', t:'number', step:'0.01', hint:'Em branco: usa o último abastecimento ou o preço geral.'},
     {k:'motorista', l:'Motorista principal', t:'motorista'}, {k:'rastreadorId', l:'ID do veículo no AgileSat (opcional)'},
     {k:'vencLicenciamento', l:'Vencimento do licenciamento', t:'date'}, {k:'vencSeguro', l:'Vencimento do seguro', t:'date'},
-    {k:'status', l:'Status', t:'select', opts:['Ativo','Em manutenção','Parado']}]},
+    {k:'status', l:'Status', t:'select', opts:['Ativo','Em manutenção','Parado','Inativo / vendido']},
+    {k:'puxarRastreador', l:'Puxar dados do rastreador', t:'select', opts:['Sim','Não']}]},
   motoristas:{label:'motorista', fields:[
     {k:'nome', l:'Nome', req:1}, {k:'cnhCategoria', l:'Categoria da CNH', t:'select', opts:['A','B','AB','C','D','E','AD','AE']},
     {k:'vencCnh', l:'Vencimento da CNH', t:'date'}, {k:'telefone', l:'Telefone'}]},

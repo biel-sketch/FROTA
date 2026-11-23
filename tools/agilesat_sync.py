@@ -288,6 +288,10 @@ def sincronizar(api, fb, horas, teste=False):
         ev = ultimos.get(rid, {})
         km = num(ev.get("ras_eve_hodometro"), 0) / 1000.0
         vid, v = acha(rid, placa)
+        if vid and str(v.get("puxarRastreador", "Sim")) == "Não":
+            paths[f"posicoes/{vid}"] = None  # tira do mapa da frota
+            cont["ignorados"] = cont.get("ignorados", 0) + 1
+            continue
         if not vid:
             vid = nova_chave()
             v = {"placa": norm_placa(placa), "modelo": corrige_texto(x.get("ras_vei_veiculo")), "status": "Ativo",
@@ -377,7 +381,8 @@ def sincronizar(api, fb, horas, teste=False):
 
     resumo = (f"{len(veic_api)} veículos ({cont['novos']} novos), {cont['pos']} posições, {cont['viagens']} viagens, "
               f"{len(visitas)} visitas" + (f", {cont['postos']} postos novos" if cont["postos"] else "")
-              + (f", {cont['mot']} motoristas novos" if cont["mot"] else ""))
+              + (f", {cont['mot']} motoristas novos" if cont["mot"] else "")
+              + (f", {cont['ignorados']} veículo(s) ignorado(s)" if cont.get("ignorados") else ""))
     agora = int(time.time() * 1000)
     paths["config/ultimaSync"] = {"em": agora, "resumo": resumo, "origem": "GitHub Actions"}
     paths[f"logs/{nova_chave()}"] = {"ts": agora, "usuario": "Sincronização AgileSat", "acao": "Sincronizou o rastreador", "detalhe": resumo}
