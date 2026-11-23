@@ -129,7 +129,15 @@ function calc(){
   var vs = vals(DB.veiculos).filter(function(v){ return vOk(v._id); });
   var per = {};
   vs.forEach(function(v){ per[v._id] = {v:v, kmGps:0, kmOdo:0, km:0, litros:0, comb:0, consumo:null, manut:0, pedag:0, viagens:0, velMax:0}; });
-  var ab = vals(DB.abastecimentos).filter(function(a){ return per[a.veiculoId] && inP(a.data); });
+  // abastecimento mensal conta proporcional aos dias do mês que caem no período
+  var R = range();
+  var fatorAb = function(a){
+    if(!ehMensal(a)) return inP(a.data) ? 1 : 0;
+    var d = toDate(a.data); if(!d) return 0;
+    var i = new Date(d.getFullYear(), d.getMonth(), 1), f = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999);
+    var ov = Math.min(f, R[1]) - Math.max(i, R[0]); return ov > 0 ? Math.min(1, ov / (f - i)) : 0;
+  };
+  var ab = vals(DB.abastecimentos).filter(function(a){ return per[a.veiculoId] && fatorAb(a) > 0; });
   var mn = vals(DB.manutencoes).filter(function(m){ return per[m.veiculoId] && m.status !== 'Agendada' && inP(m.data); });
   var pd = vals(DB.pedagios).filter(function(p){ return per[p.veiculoId] && inP(p.data); });
   var vg = vals(DB.viagens).filter(function(t){ return per[t.veiculoId] && inP(t.inicio); });
@@ -137,7 +145,7 @@ function calc(){
   mn.forEach(function(m){ per[m.veiculoId].manut += num(m.custo); });
   pd.forEach(function(x){ per[x.veiculoId].pedag += num(x.valor); });
   var byV = {};
-  ab.forEach(function(a){ (byV[a.veiculoId] = byV[a.veiculoId] || []).push(a); per[a.veiculoId].litros += num(a.litros); per[a.veiculoId].comb += num(a.valor); });
+  ab.forEach(function(a){ var k = fatorAb(a); if(!ehMensal(a)) (byV[a.veiculoId] = byV[a.veiculoId] || []).push(a); per[a.veiculoId].litros += num(a.litros) * k; per[a.veiculoId].comb += num(a.valor) * k; });
   Object.keys(byV).forEach(function(id){
     var list = byV[id].sort(function(a, b){ return num(a.km) - num(b.km); });
     if(list.length >= 2){
@@ -146,6 +154,11 @@ function calc(){
       per[id].kmComb = dk > 0 ? dk : 0;
       if(l > 0 && dk > 0) per[id].consumo = dk / l;
     }
+  });
+  // consumo real pelos lançamentos mensais: KM rodado nos meses lançados ÷ litros (últimos 3 meses lançados)
+  Object.keys(per).forEach(function(id){
+    if(per[id].consumo) return;
+    var r = consumoMensal(id); if(r){ per[id].consumo = r.consumo; per[id].kmComb = r.km; per[id].consumoFonte = r.fonte; }
   });
   // KM pelo hodômetro: todas as leituras do período (abastecimentos, leituras de KM, viagens, manutenções e posições)
   leiturasKm().forEach(function(r){ var p = per[r.v]; if(!p || !inP(r.d)) return; p._min = p._min == null ? r.km : Math.min(p._min, r.km); p._max = p._max == null ? r.km : Math.max(p._max, r.km); });
@@ -171,6 +184,13 @@ function calc(){
   return {per:per, ab:ab, mn:mn, pd:pd, vg:vg, T:T, vs:vs};
 }
 
+function consumoMensal(vid){
+  var ms = vals(DB.abastecimentos).filter(function(a){ return a.veiculoId === vid && ehMensal(a) && num(a.litros) > 0; })
+    .sort(function(a, b){ return String(b.data).localeCompare(String(a.data)); }).slice(0, 3);
+  var km = 0, l = 0, n = 0;
+  ms.forEach(function(a){ var d = toDate(a.data); if(!d) return; var k = kmNoIntervalo(vid, new Date(d.getFullYear(), d.getMonth(), 1), new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59)); if(k > 0){ km += k; l += num(a.litros); n++; } });
+  return km > 0 && l > 0 ? {consumo:km / l, km:km, fonte:n + ' mês(es) lançado(s)'} : null;
+}
 function leiturasKm(){
   var out = [];
   function add(v, d, km){ km = num(km); if(v && d && km > 0) out.push({v:v, d:d, km:km}); }
@@ -492,20 +512,21 @@ VIEWS.hodometro = function(){
 VIEWS.abastecimentos = function(){
   var c = calc();
   var rows = c.ab.slice().sort(function(a, b){ return String(b.data).localeCompare(String(a.data)); });
+  var sv = rows.reduce(function(t, a){ return t + num(a.valor); }, 0), sl = rows.reduce(function(t, a){ return t + num(a.litros); }, 0);
   var html = '<div class="stats five">' +
-      stat('Gasto com combustível', fmtR(c.T.comb)) + stat('Litros', fmtN(c.T.litros)) +
-      stat('Preço médio', c.T.litros ? fmtR(c.T.comb / c.T.litros) + '/l' : '—') +
-      stat('Consumo médio', c.T.consumo ? fmtN(c.T.consumo, 1) + ' km/l' : '—', '', 'teal') + stat('Abastecimentos', c.ab.length) +
+      stat('Gasto com combustível', fmtR(sv), c.T.comb && Math.round(c.T.comb) !== Math.round(sv) ? fmtR(c.T.comb) + ' proporcional ao período' : '') + stat('Litros', fmtN(sl)) +
+      stat('Preço médio', sl ? fmtR(sv / sl) + '/l' : '—') +
+      stat('Consumo médio', c.T.consumo ? fmtN(c.T.consumo, 1) + ' km/l' : '—', 'KM do rastreador ÷ litros lançados', 'teal') + stat('Lançamentos', c.ab.length) +
     '</div>' +
     panel('Abastecimentos', table([
-      {l:'Data', f:function(a){ return '<span class="mono">' + fmtD(a.data) + '</span>'; }},
+      {l:'Data', f:function(a){ return ehMensal(a) ? '<span class="mono">' + esc(new Date(toDate(a.data)).toLocaleDateString('pt-BR', {month:'short', year:'numeric'}).replace('.', '')) + '</span><span class="sub">mensal</span>' : '<span class="mono">' + fmtD(a.data) + '</span>'; }},
       {l:'Veículo', f:function(a){ return esc(placaDe(a.veiculoId)); }},
       {l:'Motorista', k:'motorista'}, {l:'Posto', k:'posto'}, {l:'Combustível', k:'combustivel'},
       {l:'Litros', n:1, f:function(a){ return fmtN(a.litros, 2); }},
       {l:'R$/l', n:1, f:function(a){ return num(a.litros) ? fmtR(num(a.valor) / num(a.litros)) : '—'; }},
       {l:'Total', n:1, f:function(a){ return fmtR(a.valor); }},
-      {l:'Hodômetro', n:1, f:function(a){ return fmtN(a.km); }}
-    ], rows, {acts:function(a){ return acts('abastecimentos', a._id); }}));
+      {l:'Hodômetro', n:1, f:function(a){ return a.km ? fmtN(a.km) : '—'; }}
+    ], rows, {acts:function(a){ return acts('abastecimentos', a._id); }}), '', 'lançamento mensal entra no mês inteiro; nos totais de períodos menores conta proporcional aos dias');
   return {html:html, actions: exportBtn('abastecimentos') + impBtn('abastecimentos') + newBtn('abastecimentos', 'Abastecimento')};
 };
 
@@ -522,11 +543,11 @@ VIEWS.consumo = function(){
   var duo = per.length ? '<div class="bars">' + per.map(function(p){
     var ok = !p.consumo || !num(p.v.metaConsumo) || p.consumo >= num(p.v.metaConsumo) * 0.9;
     return '<div class="bar-row duo"><span class="bar-label">'+esc(p.v.placa)+'</span><div class="bar-pair"><div class="bar-track"><div class="bar-fill '+(ok ? '' : 'red')+'" style="width:'+((p.consumo||0)/max*100).toFixed(1)+'%"></div></div><div class="bar-track"><div class="bar-fill blue" style="width:'+(num(p.v.metaConsumo)/max*100).toFixed(1)+'%"></div></div></div><span class="bar-val">'+(p.consumo ? fmtN(p.consumo, 1) : '—')+' / '+fmtN(p.v.metaConsumo, 1)+'</span></div>';
-  }).join('') + '</div>' : empty('Sem abastecimentos suficientes no período (são necessários 2 por veículo).');
+  }).join('') + '</div>' : empty('Sem dados para o consumo real: lance o abastecimento mensal de cada veículo (ou 2 avulsos com hodômetro).');
   var html = '<div class="stats">' + stat('Combustível estimado', fmtR(c.T.combEst), fmtN(c.T.litrosEst) + ' litros · ' + fmtN(c.T.km) + ' km', 'teal') + stat('Lançado em abastecimentos', fmtR(c.T.comb), fmtN(c.T.litros) + ' litros') + stat('Diferença', c.T.comb ? fmtR(c.T.comb - c.T.combEst) : '—', 'lançado − estimado', c.T.comb && Math.abs(c.T.comb - c.T.combEst) > c.T.combEst * 0.15 ? 'amber' : '') + stat('Veículos sem consumo ou preço', c.T.semDados, '', c.T.semDados ? 'amber' : '') + '</div>' +
     panel('Preço do litro', precosHtml, '', 'usado para estimar o gasto com combustível') +
     '<div class="grid-2">' +
-    panel('Consumo real × meta', '<div class="legend"><span><i class="c-teal"></i>Consumo real (km/l)</span><span><i class="c-blue"></i>Meta</span><span><i class="c-red"></i>Abaixo de 90% da meta</span></div>' + duo, '', 'calculado pelo hodômetro dos abastecimentos') +
+    panel('Consumo real × meta', '<div class="legend"><span><i class="c-teal"></i>Consumo real (km/l)</span><span><i class="c-blue"></i>Meta</span><span><i class="c-red"></i>Abaixo de 90% da meta</span></div>' + duo, '', 'KM rodados no mês ÷ litros lançados') +
     panel('Gasto mensal com combustível', colsChart(ms, [{l:'Combustível', cls:'c-teal', data:g}]), '', 'últimos 6 meses') +
     '</div>' +
     panel('Consumo por veículo', table([

@@ -16,10 +16,11 @@ var SCHEMA = {
     {k:'nome', l:'Nome', req:1}, {k:'cnhCategoria', l:'Categoria da CNH', t:'select', opts:['A','B','AB','C','D','E','AD','AE']},
     {k:'vencCnh', l:'Vencimento da CNH', t:'date'}, {k:'telefone', l:'Telefone'}]},
   abastecimentos:{label:'abastecimento', fields:[
-    {k:'data', l:'Data', t:'date', req:1}, {k:'veiculoId', l:'Veículo', t:'veic', req:1}, {k:'motorista', l:'Motorista', t:'motorista'},
+    {k:'tipo', l:'Tipo de lançamento', t:'select', opts:['Mensal (total do mês)','Avulso (um abastecimento)']},
+    {k:'data', l:'Data', t:'date', req:1, hint:'No mensal, qualquer dia do mês de referência.'}, {k:'veiculoId', l:'Veículo', t:'veic', req:1}, {k:'motorista', l:'Motorista', t:'motorista'},
     {k:'posto', l:'Posto de combustível'}, {k:'combustivel', l:'Combustível', t:'select', opts:['Gasolina','Etanol','Diesel S10','Diesel S500','GNV','Arla 32']},
     {k:'litros', l:'Litros', t:'number', step:'0.01', req:1}, {k:'valor', l:'Valor total (R$)', t:'number', step:'0.01', req:1},
-    {k:'km', l:'Hodômetro (km)', t:'number', req:1}, {k:'tanqueCheio', l:'Tanque cheio?', t:'select', opts:['Sim','Não']}]},
+    {k:'km', l:'Hodômetro (km)', t:'number', hint:'Opcional no mensal: o KM do mês vem do rastreador.'}, {k:'tanqueCheio', l:'Tanque cheio?', t:'select', opts:['Sim','Não']}]},
   manutencoes:{label:'manutenção', fields:[
     {k:'veiculoId', l:'Veículo', t:'veic', req:1}, {k:'tipo', l:'Tipo', t:'select', opts:['Preventiva','Corretiva']},
     {k:'servico', l:'Serviço', req:1}, {k:'status', l:'Situação', t:'select', opts:['Realizada','Agendada']},
@@ -64,7 +65,7 @@ function closeModal(){ $('#modal').classList.remove('visible'); modalRefresh = n
 function openForm(col, id){
   var sc = SCHEMA[col], cur = id ? (DB[col][id] || {}) : {};
   var agora = today() + 'T' + pad(new Date().getHours()) + ':' + pad(new Date().getMinutes());
-  var defaults = {data: today(), veiculoId: F.veic || '', tanqueCheio:'Sim', status: col === 'veiculos' ? 'Ativo' : 'Realizada', raio:200, freqSemana:1, dataHora: agora, chegada: col === 'visitas' ? agora : '', ignicao:'Desligado'};
+  var defaults = {data: today(), veiculoId: F.veic || '', tanqueCheio:'Sim', tipo:'Mensal (total do mês)', status: col === 'veiculos' ? 'Ativo' : 'Realizada', raio:200, freqSemana:1, dataHora: agora, chegada: col === 'visitas' ? agora : '', ignicao:'Desligado'};
   if(col === 'posicoes' && id){ cur = Object.assign({}, cur, {ignicao: cur.ignicao ? 'Ligado' : 'Desligado'}); }
   function opts(list, v){ return list.map(function(o){ return '<option value="'+esc(o[0])+'"'+(String(v == null ? '' : v) === String(o[0]) ? ' selected' : '')+'>'+esc(o[1])+'</option>'; }).join(''); }
   var fields = sc.fields.map(function(f){
@@ -106,6 +107,10 @@ function openForm(col, id){
       if(data.km === '' && data.kmInicial !== '' && data.kmFinal !== '') data.km = num(data.kmFinal) - num(data.kmInicial);
     }
     if(col === 'posicoes') data.ignicao = data.ignicao === 'Ligado';
+    if(col === 'abastecimentos'){
+      if(!data.km && !ehMensal(data)){ var e4 = $('#mform-err'); e4.textContent = 'No abastecimento avulso, informe o hodômetro.'; e4.style.display = 'block'; return; }
+      if(ehMensal(data) && data.data) data.data = fimDoMes(data.data);
+    }
     var rec = Object.assign({}, clean(cur), clean(data));
     sc.fields.forEach(function(f){ if(data[f.k] === '' || data[f.k] == null) delete rec[f.k]; });
     if(col === 'visitas' && !id) rec.fonte = 'Manual';
@@ -291,6 +296,7 @@ function importarLinhas(col, rows){
     var falta = sc.fields.filter(function(f){ return f.req && (o[f.k] === undefined || o[f.k] === ''); });
     if(falta.length){ skip.push('linha ' + (i + 2) + ': falta ' + falta.map(function(f){ return f.t === 'veic' ? 'placa (cadastrada)' : f.t === 'posto' ? 'posto (cadastrado)' : f.l; }).join(', ')); return; }
     if(col === 'veiculos'){ o.placa = String(o.placa).toUpperCase(); var ex = vals(DB.veiculos).find(function(x){ return normPlaca(x.placa) === normPlaca(o.placa); }); if(ex){ p['veiculos/' + ex._id] = Object.assign(clean(ex), o); ok++; return; } }
+    if(col === 'abastecimentos'){ if(!o.tipo) o.tipo = o.km ? 'Avulso (um abastecimento)' : 'Mensal (total do mês)'; if(ehMensal(o) && o.data) o.data = fimDoMes(o.data); }
     if(col === 'visitas' || col === 'viagens' || col === 'posicoes') o.fonte = 'Planilha';
     if(col === 'viagens' && o.km === undefined && o.kmInicial !== undefined && o.kmFinal !== undefined) o.km = num(o.kmFinal) - num(o.kmInicial);
     if(col === 'posicoes') o.ignicao = /lig|sim|1|true/i.test(String(o.ignicao || ''));
@@ -358,3 +364,6 @@ function voltarPuxar(rid){
 }
 
 function rastreadorAgora(vid){ var po = (DB.posicoes || {})[vid]; return po && po.kmRastreador != null && po.kmRastreador !== '' ? num(po.kmRastreador) : null; }
+
+function ehMensal(a){ return /^mensal/i.test(String(a && a.tipo || '')); }
+function fimDoMes(s){ s = String(s).slice(0, 10); var y = +s.slice(0, 4), m = +s.slice(5, 7); if(!y || !m) return s; return y + '-' + String(m).padStart(2, '0') + '-' + String(new Date(y, m, 0).getDate()).padStart(2, '0'); }
