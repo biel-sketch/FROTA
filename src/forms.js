@@ -177,6 +177,7 @@ function onAction(e){
   if(a === 'demo-remover'){ removerDemo(); return; }
   if(a === 'backup'){ baixarBackup(); return; }
   if(a === 'atualizar'){ atualizarAgora(); return; }
+  if(a === 'pdf'){ gerarPDF(); return; }
 }
 
 function usarLocalizacao(modo){
@@ -226,7 +227,7 @@ function rowsOf(col, list){
 function exportar(key){
   var c = calc();
   if(key === 'custos'){
-    xlsxDownload('frota_custos', [{nome:'Custo por veículo', rows: Object.keys(c.per).map(function(k){ var p = c.per[k]; return {placa:p.v.placa, modelo:p.v.modelo || '', km:Math.round(p.km), litros:+p.litros.toFixed(2), consumo_kml:p.consumo ? +p.consumo.toFixed(2) : '', combustivel:+p.comb.toFixed(2), manutencao:+p.manut.toFixed(2), pedagio:+p.pedag.toFixed(2), total:+p.total.toFixed(2), custo_km:p.custoKm ? +p.custoKm.toFixed(3) : ''}; })}]);
+    xlsxDownload('frota_custos', [{nome:'Custo por veículo', rows: Object.keys(c.per).map(function(k){ var p = c.per[k]; return {placa:p.v.placa, modelo:p.v.modelo || '', km_periodo:Math.round(p.km), hodometro_atual:p.v.kmAtual ? Math.round(num(p.v.kmAtual)) : '', litros:+p.litros.toFixed(2), consumo_kml:p.consumo ? +p.consumo.toFixed(2) : '', combustivel:+p.comb.toFixed(2), manutencao:+p.manut.toFixed(2), pedagio:+p.pedag.toFixed(2), total:+p.total.toFixed(2), custo_km:p.custoKm ? +p.custoKm.toFixed(3) : ''}; })}]);
     return;
   }
   var map = {abastecimentos:c.ab, manutencoes:vals(DB.manutencoes).filter(function(m){ return vOk(m.veiculoId) && (m.status === 'Agendada' || inP(m.data)); }), pedagios:c.pd, viagens:c.vg,

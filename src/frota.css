@@ -1,6 +1,7 @@
   /* ===== PAINEL FROTA — complementos ===== */
   .stats.six{grid-template-columns:repeat(6,1fr);}
   .stats.three{grid-template-columns:repeat(3,1fr);}
+  .stats.five{grid-template-columns:repeat(5,1fr);}
   .stat-value.sm{font-size:24px;}
   .grid-3-1{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(0,1fr);gap:16px;margin-bottom:16px;}
   .grid-3-1 > .panel, .grid-2 > .panel{min-width:0;}
@@ -50,7 +51,7 @@
   .cfg-card .modal-grid{margin-bottom:12px;}
 
   @media (max-width:1300px){ .stats.six{grid-template-columns:repeat(3,1fr);} }
-  @media (max-width:1100px){ .grid-3-1{grid-template-columns:1fr;} .stats.six, .stats.three{grid-template-columns:repeat(2,1fr);} }
+  @media (max-width:1100px){ .grid-3-1{grid-template-columns:1fr;} .stats.six, .stats.five, .stats.three{grid-template-columns:repeat(2,1fr);} }
 
   /* mapas Leaflet */
   .map-wrap{position:relative;padding:14px 18px 0;}

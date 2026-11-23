@@ -655,11 +655,14 @@ VIEWS.relatorios = function(){
   ms.forEach(function(m){ cb[m.k] = c.vs.reduce(function(t, v){ var e = combEstimadoMes(v._id, m.k); if(!e) e = vals(DB.abastecimentos).filter(function(a){ return a.veiculoId === v._id && String(a.data).slice(0,7) === m.k; }).reduce(function(x, a){ return x + num(a.valor); }, 0); return t + e; }, 0); });
   vals(DB.manutencoes).forEach(function(a){ if(a.status !== 'Agendada' && vOk(a.veiculoId)){ var k = String(a.data).slice(0,7); mt[k] = (mt[k]||0) + num(a.custo); } });
   vals(DB.pedagios).forEach(function(a){ if(vOk(a.veiculoId)){ var k = String(a.data).slice(0,7); pg[k] = (pg[k]||0) + num(a.valor); } });
-  var mrows = ms.map(function(m){ return {l:m.l, c:cb[m.k]||0, m:mt[m.k]||0, p:pg[m.k]||0}; });
-  var html = '<div class="stats">' + stat('Custo total', fmtR(c.T.total)) + stat('Combustível (estimado)', fmtR(c.T.combUsado), c.T.total ? fmtN(c.T.combUsado / c.T.total * 100) + '% do total' : '') + stat('Manutenção', fmtR(c.T.manut), c.T.total ? fmtN(c.T.manut / c.T.total * 100) + '% do total' : '') + stat('Pedágios', fmtR(c.T.pedag), c.T.total ? fmtN(c.T.pedag / c.T.total * 100) + '% do total' : '') + '</div>' +
+  var mrows = ms.map(function(m){ var y = +m.k.slice(0, 4), mm = +m.k.slice(5, 7), a = new Date(y, mm - 1, 1), z = new Date(y, mm, 0, 23, 59, 59);
+    return {l:m.l, km:c.vs.reduce(function(t, v){ return t + kmNoIntervalo(v._id, a, z); }, 0), c:cb[m.k]||0, m:mt[m.k]||0, p:pg[m.k]||0}; });
+  var hod = c.vs.reduce(function(t, v){ return t + num(v.kmAtual); }, 0);
+  var html = '<div class="stats five">' + stat('KM rodados no período', fmtN(c.T.km) + '<span class="mono"> km</span>', c.vs.length === 1 ? 'hodômetro atual: ' + fmtN(hod) + ' km' : c.vs.length + ' veículos') + stat('Custo total', fmtR(c.T.total), c.T.km ? fmtR(c.T.total / c.T.km) + ' por km' : '') + stat('Combustível (estimado)', fmtR(c.T.combUsado), c.T.total ? fmtN(c.T.combUsado / c.T.total * 100) + '% do total' : '') + stat('Manutenção', fmtR(c.T.manut), c.T.total ? fmtN(c.T.manut / c.T.total * 100) + '% do total' : '') + stat('Pedágios', fmtR(c.T.pedag), c.T.total ? fmtN(c.T.pedag / c.T.total * 100) + '% do total' : '') + '</div>' +
     panel('Custo por veículo', table([
       {l:'Veículo', f:function(r){ return esc(r.v.placa) + '<span class="sub">' + esc(r.v.modelo || '') + '</span>'; }},
-      {l:'KM', n:1, f:function(r){ return fmtN(r.km); }},
+      {l:'KM no período', n:1, f:function(r){ return fmtN(r.km); }},
+      {l:'Hodômetro atual', n:1, f:function(r){ return r.v.kmAtual ? fmtN(r.v.kmAtual) : '—'; }},
       {l:'Litros (estim.)', n:1, f:function(r){ return fmtN(r.litrosEst); }},
       {l:'Combustível', n:1, f:function(r){ return fmtR(r.combUsado); }},
       {l:'Lançado', n:1, f:function(r){ return fmtR(r.comb); }},
@@ -670,12 +673,13 @@ VIEWS.relatorios = function(){
     ], rows), '', 'no período') +
     panel('Custo por mês', table([
       {l:'Mês', f:function(r){ return esc(r.l); }},
+      {l:'KM rodados', n:1, f:function(r){ return fmtN(r.km); }},
       {l:'Combustível', n:1, f:function(r){ return fmtR(r.c); }},
       {l:'Manutenção', n:1, f:function(r){ return fmtR(r.m); }},
       {l:'Pedágio', n:1, f:function(r){ return fmtR(r.p); }},
       {l:'Total', n:1, f:function(r){ return fmtR(r.c + r.m + r.p); }}
     ], mrows), '', 'últimos 6 meses');
-  return {html:html, actions: exportBtn('custos')};
+  return {html:html, actions: '<button class="btn" data-act="pdf">Gerar PDF</button>' + exportBtn('custos')};
 };
 
 VIEWS.veiculos = function(){
@@ -703,3 +707,59 @@ VIEWS.motoristas = function(){
     ], ms, {empty:'Nenhum motorista cadastrado.', acts:function(m){ return acts('motoristas', m._id); }}));
   return {html:html, actions: exportBtn('motoristas') + newBtn('motoristas', 'Motorista')};
 };
+
+// =====================================================================
+// RELATÓRIO EM PDF (abre a versão para impressão; o navegador salva em PDF)
+// =====================================================================
+function textoPeriodo(){
+  var r = range(), sel = $('#f-period'), nome = sel ? sel.options[sel.selectedIndex].text.replace('…', '') : '';
+  var d = function(x){ return x.toLocaleDateString('pt-BR'); };
+  if(F.period === 'tudo') return 'Todo o período';
+  return nome + ' — ' + (d(r[0]) === d(r[1]) ? d(r[0]) : d(r[0]) + ' a ' + d(r[1]));
+}
+function gerarPDF(){
+  var w = window.open('', '_blank');
+  if(!w){ toast('O navegador bloqueou a janela do relatório. Libere pop-ups para este site.', 'err'); return; }
+  var c = calc(), rows = Object.keys(c.per).map(function(k){ return c.per[k]; }).sort(function(a, b){ return String(a.v.placa).localeCompare(String(b.v.placa)); });
+  var r = range(), veic = F.veic && DB.veiculos[F.veic] ? DB.veiculos[F.veic].placa + ' · ' + (DB.veiculos[F.veic].modelo || '') : 'Todos os veículos';
+  var tb = function(cols, data, tot){
+    return '<table><thead><tr>' + cols.map(function(x){ return '<th' + (x.n ? ' class="n"' : '') + '>' + x.l + '</th>'; }).join('') + '</tr></thead><tbody>' +
+      (data.length ? data.map(function(d){ return '<tr>' + cols.map(function(x){ return '<td' + (x.n ? ' class="n"' : '') + '>' + x.f(d) + '</td>'; }).join('') + '</tr>'; }).join('') : '<tr><td colspan="' + cols.length + '" class="vazio">Sem registros no período.</td></tr>') +
+      '</tbody>' + (tot ? '<tfoot><tr>' + cols.map(function(x, i){ return '<td' + (x.n ? ' class="n"' : '') + '>' + (x.t ? x.t() : i === 0 ? 'Total' : '') + '</td>'; }).join('') + '</tr></tfoot>' : '') + '</table>';
+  };
+  var soma = function(k){ return rows.reduce(function(t, x){ return t + num(x[k]); }, 0); };
+  var html = '<h2>Resumo por veículo</h2>' + tb([
+      {l:'Veículo', f:function(x){ return '<b>' + esc(x.v.placa) + '</b><br><span class="sub">' + esc(x.v.modelo || '') + '</span>'; }},
+      {l:'KM no período', n:1, f:function(x){ return fmtN(x.km); }, t:function(){ return fmtN(c.T.km); }},
+      {l:'Hodômetro atual', n:1, f:function(x){ return x.v.kmAtual ? fmtN(x.v.kmAtual) + ' km' : '—'; }},
+      {l:'Viagens', n:1, f:function(x){ return fmtN(x.viagens); }, t:function(){ return fmtN(soma('viagens')); }},
+      {l:'Combustível', n:1, f:function(x){ return fmtR(x.combUsado); }, t:function(){ return fmtR(c.T.combUsado); }},
+      {l:'Manutenção', n:1, f:function(x){ return fmtR(x.manut); }, t:function(){ return fmtR(c.T.manut); }},
+      {l:'Pedágio', n:1, f:function(x){ return fmtR(x.pedag); }, t:function(){ return fmtR(c.T.pedag); }},
+      {l:'Total', n:1, f:function(x){ return '<b>' + fmtR(x.total) + '</b>'; }, t:function(){ return fmtR(c.T.total); }},
+      {l:'R$/km', n:1, f:function(x){ return x.custoKm ? fmtR(x.custoKm) : '—'; }, t:function(){ return c.T.km ? fmtR(c.T.total / c.T.km) : '—'; }}
+    ], rows, true);
+  var dentro = function(col, campo){ return vals(DB[col]).filter(function(x){ return vOk(x.veiculoId) && inP(x[campo]); }).sort(function(a, b){ return String(a[campo]) < String(b[campo]) ? -1 : 1; }); };
+  var ab = dentro('abastecimentos', 'data'), mn = dentro('manutencoes', 'data').filter(function(m){ return m.status !== 'Agendada'; }), pd = dentro('pedagios', 'data');
+  var vis = dentro('visitas', 'chegada');
+  if(ab.length) html += '<h2>Abastecimentos</h2>' + tb([{l:'Data', f:function(x){ return fmtD(x.data); }}, {l:'Veículo', f:function(x){ return esc(placaDe(x.veiculoId)); }}, {l:'Posto', f:function(x){ return esc(x.posto || ''); }}, {l:'Litros', n:1, f:function(x){ return fmtN(x.litros, 1); }}, {l:'KM', n:1, f:function(x){ return x.km ? fmtN(x.km) : '—'; }}, {l:'Valor', n:1, f:function(x){ return fmtR(x.valor); }, t:function(){ return fmtR(ab.reduce(function(t, x){ return t + num(x.valor); }, 0)); }}], ab, true);
+  if(mn.length) html += '<h2>Manutenções</h2>' + tb([{l:'Data', f:function(x){ return fmtD(x.data); }}, {l:'Veículo', f:function(x){ return esc(placaDe(x.veiculoId)); }}, {l:'Serviço', f:function(x){ return esc(x.servico || ''); }}, {l:'Oficina', f:function(x){ return esc(x.oficina || ''); }}, {l:'KM', n:1, f:function(x){ return x.km ? fmtN(x.km) : '—'; }}, {l:'Custo', n:1, f:function(x){ return fmtR(x.custo); }, t:function(){ return fmtR(mn.reduce(function(t, x){ return t + num(x.custo); }, 0)); }}], mn, true);
+  if(pd.length) html += '<h2>Pedágios</h2>' + tb([{l:'Data', f:function(x){ return fmtD(x.data); }}, {l:'Veículo', f:function(x){ return esc(placaDe(x.veiculoId)); }}, {l:'Praça', f:function(x){ return esc(x.praca || x.local || ''); }}, {l:'Valor', n:1, f:function(x){ return fmtR(x.valor); }, t:function(){ return fmtR(pd.reduce(function(t, x){ return t + num(x.valor); }, 0)); }}], pd, true);
+  if(vis.length) html += '<h2>Visitas a postos</h2>' + tb([{l:'Chegada', f:function(x){ return fmtDH(x.chegada); }}, {l:'Veículo', f:function(x){ return esc(placaDe(x.veiculoId)); }}, {l:'Posto', f:function(x){ var p = postoDe(x.postoId); return esc(p ? p.nome : '—'); }}, {l:'Motorista', f:function(x){ return esc(x.motorista || ''); }}, {l:'Tempo', n:1, f:function(x){ var a = toDate(x.chegada), b = toDate(x.saida); return a && b && b > a ? fmtN((b - a) / 6e4) + ' min' : '—'; }}], vis, false);
+  var card = function(l, v, s){ return '<div class="card"><div class="l">' + l + '</div><div class="v">' + v + '</div>' + (s ? '<div class="s">' + s + '</div>' : '') + '</div>'; };
+  var hod = c.vs.length === 1 ? 'hodômetro atual ' + fmtN(c.vs[0].kmAtual) + ' km' : c.vs.length + ' veículos';
+  var titulo = 'Relatório de frota ' + iso(r[0]) + (iso(r[0]) !== iso(r[1]) ? ' a ' + iso(r[1]) : '') + (F.veic && DB.veiculos[F.veic] ? ' ' + DB.veiculos[F.veic].placa : '');
+  var css = '@page{size:A4;margin:12mm}*{box-sizing:border-box}body{font:12px/1.45 Inter,Arial,sans-serif;color:#0B1220;margin:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}' +
+    '.top{background:#0B1220;color:#EAF0FA;padding:16px 20px;border-radius:8px;display:flex;justify-content:space-between;align-items:center}.top img{height:44px}.top h1{margin:0;font:600 18px "Space Grotesk",Arial}.top .m{font-size:11px;color:#9FB0CC;text-align:right}' +
+    '.cards{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin:14px 0}.card{border:1px solid #D6DEEA;border-radius:8px;padding:10px}.card .l{font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:#5B6B85}.card .v{font:600 16px "Space Grotesk",Arial;margin-top:4px}.card .s{font-size:10px;color:#5B6B85}' +
+    'h2{font:600 13px "Space Grotesk",Arial;margin:18px 0 6px;padding-left:8px;border-left:3px solid #2DD4BF}table{width:100%;border-collapse:collapse;page-break-inside:auto}tr{page-break-inside:avoid}th{font-size:9px;text-transform:uppercase;letter-spacing:.05em;color:#5B6B85;text-align:left;border-bottom:1.5px solid #0B1220;padding:6px}td{padding:6px;border-bottom:1px solid #E4E9F1}.n{text-align:right;white-space:nowrap}.sub{color:#5B6B85;font-size:10px}tfoot td{font-weight:700;border-top:1.5px solid #0B1220;border-bottom:0}.vazio{text-align:center;color:#5B6B85}' +
+    '.rod{margin-top:18px;font-size:10px;color:#5B6B85;display:flex;justify-content:space-between}.bar{position:fixed;top:10px;right:10px}.bar button{font:600 13px Arial;padding:8px 14px;border-radius:6px;border:0;background:#2DD4BF;cursor:pointer}@media print{.bar{display:none}}';
+  w.document.open();
+  w.document.write('<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>' + esc(titulo) + '</title><style>' + css + '</style></head><body>' +
+    '<div class="bar"><button onclick="window.print()">Salvar em PDF / Imprimir</button></div>' +
+    '<div class="top"><img src="' + $('.brand-logo-img').src + '" alt=""><div><h1>Relatório de frota</h1></div><div class="m">' + esc(textoPeriodo()) + '<br>' + esc(veic) + '</div></div>' +
+    '<div class="cards">' + card('KM rodados', fmtN(c.T.km) + ' km', hod) + card('Custo total', fmtR(c.T.total), c.T.km ? fmtR(c.T.total / c.T.km) + ' por km' : '') + card('Combustível', fmtR(c.T.combUsado), fmtN(c.T.litrosEst) + ' L estimados') + card('Manutenção', fmtR(c.T.manut), '') + card('Pedágios', fmtR(c.T.pedag), '') + '</div>' +
+    html + '<div class="rod"><span>Painel de Frota · Grupo Login Serv</span><span>Gerado em ' + new Date().toLocaleString('pt-BR') + ' por ' + esc(currentUser ? currentUser.name : '') + '</span></div>' +
+    '<script>window.onload=function(){setTimeout(function(){window.print()},400)}<\/script></body></html>');
+  w.document.close();
+}
