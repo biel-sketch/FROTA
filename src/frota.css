@@ -51,3 +51,18 @@
 
   @media (max-width:1300px){ .stats.six{grid-template-columns:repeat(3,1fr);} }
   @media (max-width:1100px){ .grid-3-1{grid-template-columns:1fr;} .stats.six, .stats.three{grid-template-columns:repeat(2,1fr);} }
+
+  /* mapas Leaflet */
+  .map-wrap{position:relative;padding:14px 18px 0;}
+  .map-big{height:560px;border-radius:10px;border:1px solid var(--line);background:#0D1526;}
+  .map-full-btn{position:absolute;top:24px;left:66px;z-index:500;}
+  .map-wrap.map-full{position:fixed;inset:0;z-index:2000;background:var(--bg);padding:0;}
+  .map-wrap.map-full .map-big{height:100vh;border-radius:0;border:0;}
+  .map-wrap.map-full .map-full-btn{top:12px;left:56px;}
+  .pin{background:none;border:0;}
+  .pin-dot{width:26px;height:26px;border-radius:50%;border:3px solid #0B1220;box-shadow:0 0 0 2px rgba(255,255,255,.85);display:grid;place-items:center;font:600 11px/1 var(--font-body);color:#0B1220;}
+  .leaflet-tooltip.tt-placa{background:#0B1220;color:#EAF0FA;border:1px solid #2DD4BF;font:600 11px var(--font-mono);padding:2px 6px;box-shadow:none;}
+  .leaflet-tooltip.tt-posto{background:#F2B84B;color:#0B1220;border:0;font:600 11px var(--font-body);padding:2px 6px;}
+  .leaflet-popup-content{font:13px/1.45 var(--font-body);}
+  .leaflet-container{font-family:var(--font-body);}
+  @media (max-width:800px){ .map-big{height:420px;} }

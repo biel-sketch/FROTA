@@ -148,7 +148,7 @@ function confirmBox(title, msg, okLabel, fn){
 
 function onAction(e){
   var t = e.target.closest('[data-act],[data-trip]'); if(!t) return;
-  if(t.dataset.trip && !e.target.closest('button')){ selTrip = t.dataset.trip; scheduleRender(); return; }
+  if(t.dataset.trip && !e.target.closest('button')){ selTrip = t.dataset.trip; scheduleRender(); setTimeout(function(){ var mv = $('#mv-wrap') || $('#view .panel'); if(mv) mv.scrollIntoView({behavior:'smooth', block:'start'}); }, 120); return; }
   var a = t.dataset.act;
   if(a === 'fechar'){ closeModal(); return; }
   if(a === 'geo' || a === 'checkin'){ e.preventDefault(); usarLocalizacao(a); return; }

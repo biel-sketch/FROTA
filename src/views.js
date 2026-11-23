@@ -367,6 +367,7 @@ VIEWS.posicoes = function(){
   var lig = pos.filter(function(p){ return p.ignicao; }).length;
   var ult = pos.map(function(p){ return p.dataHora; }).sort().pop();
   var html = '<div class="stats three">' + stat('Veículos com posição', pos.length + '<span class="mono"> / ' + vals(DB.veiculos).length + '</span>') + stat('Ignição ligada', lig, 'em movimento ou parados ligados', 'teal') + stat('Última atualização', ult ? fmtDH(ult) : '—', 'pelo rastreador ou lançada manualmente') + '</div>' +
+    mapaFrotaHtml() +
     panel('Posição atual da frota', table([
       {l:'Veículo', f:function(p){ var v = DB.veiculos[p.veiculoId] || {}; return esc(v.placa || '—') + '<span class="sub">' + esc(v.modelo || '') + '</span>'; }},
       {l:'Situação', f:function(p){ return p.ignicao ? pill('teal', 'Ignição ligada') : pill('gray', 'Desligado'); }},
@@ -376,7 +377,7 @@ VIEWS.posicoes = function(){
       {l:'Fonte', f:function(p){ return p.fonte === 'Manual' || p.fonte === 'Planilha' ? pill('gray', p.fonte) : pill('blue', 'AgileSat'); }},
       {l:'', f:function(p){ return p.lat ? '<a class="lnk" target="_blank" rel="noopener" href="https://www.google.com/maps?q=' + num(p.lat) + ',' + num(p.lng) + '">Ver no mapa ↗</a>' : ''; }}
     ], pos, {empty:'Sem posições ainda. Elas chegam pela AgileSat ou podem ser lançadas aqui em “+ Posição / check-in”.', acts:function(p){ return acts('posicoes', p._id); }}));
-  return {html:html, actions: newBtn('posicoes', 'Posição / check-in')};
+  return {html:html, actions: newBtn('posicoes', 'Posição / check-in'), after:iniciarMapaFrota};
 };
 
 VIEWS.viagens = function(){
@@ -389,17 +390,17 @@ VIEWS.viagens = function(){
       stat('Viagens', c.T.viagens) + stat('KM em viagens', fmtN(kmT)) + stat('Média por viagem', c.T.viagens ? fmtN(kmT / c.T.viagens, 1) + ' km' : '—') +
       stat('Excessos de velocidade', c.vg.filter(function(x){ return num(x.velMax) > lim; }).length, 'acima de ' + lim + ' km/h', 'amber') +
       stat('Tempo parado ligado', fmtN(c.vg.reduce(function(s, x){ return s + num(x.paradoMin); }, 0) / 60, 1) + ' h') +
-    '</div><div class="grid-3-1"><div class="compact">' +
+    '</div>' +
+    panel('Trajeto' + (t ? ' — ' + esc(placaDe(t.veiculoId)) : ''), t ? mapaViagemHtml(t) : empty('Selecione uma viagem.'), '', t ? fmtDH(t.inicio) + ' → ' + fmtDH(t.fim) + ' · ' + fmtN(t.km, 1) + ' km' + (num(t.velMax) ? ' · máx. ' + fmtN(t.velMax) + ' km/h' : '') : '') +
+    '<div class="compact" id="lista-viagens">' +
     panel('Viagens', table([
       {l:'Início', f:function(x){ return '<span class="mono nowrap">' + fmtDH(x.inicio) + '</span>'; }},
       {l:'Veículo', f:function(x){ return '<span class="nowrap">' + esc(placaDe(x.veiculoId)) + '</span>'; }},
       {l:'Destino', f:function(x){ return esc(x.destino || '—') + '<span class="sub">' + esc(x.motorista || '') + (x.fonte === 'Manual' ? ' · manual' : '') + '</span>'; }},
       {l:'KM', n:1, f:function(x){ return fmtN(x.km, 1); }},
       {l:'Vel. máx.', n:1, f:function(x){ if(!num(x.velMax)) return '—'; return '<span class="nowrap">' + (num(x.velMax) > lim ? pill('red', fmtN(x.velMax) + ' km/h') : fmtN(x.velMax) + ' km/h') + '</span>'; }}
-    ], trips, {attr:function(x){ return 'data-trip="' + esc(x._id) + '" class="row-clickable' + (x._id === selTrip ? ' sel' : '') + '"'; }, acts:function(x){ return acts('viagens', x._id); }}), '', 'clique para ver o trajeto') + '</div><div class="sticky">' +
-    panel('Trajeto' + (t ? ' — ' + esc(placaDe(t.veiculoId)) : ''), t ? routeSVG(t) : empty('Selecione uma viagem.'), '', t ? fmtDH(t.inicio) + ' · ' + fmtN(t.km, 1) + ' km' : '') +
-    '</div></div>';
-  return {html:html, actions: exportBtn('viagens') + newBtn('viagens', 'Viagem')};
+    ], trips, {attr:function(x){ return 'data-trip="' + esc(x._id) + '" class="row-clickable' + (x._id === selTrip ? ' sel' : '') + '"'; }, acts:function(x){ return acts('viagens', x._id); }}), '', 'clique numa viagem para ver no mapa') + '</div>';
+  return {html:html, actions: exportBtn('viagens') + newBtn('viagens', 'Viagem'), after:function(){ if(t) iniciarMapaViagem(t); }};
 };
 
 function routeSVG(t){

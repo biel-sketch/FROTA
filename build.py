@@ -7,7 +7,7 @@ build = datetime.datetime.now().strftime('%Y-%m-%d-%H%M')
 css = ''.join((S / f).read_text(encoding='utf8') for f in ['base.css', 'extra.css', 'frota.css'])
 body = (S / 'body.html').read_text(encoding='utf8').replace('{{LOGO}}', logo).replace('{{BUILD}}', build)
 demo = (S / 'demo.json').read_text(encoding='utf8').strip()
-js = 'var DEMO_BASE = "2026-11-16";\nvar DEMO_DATA = ' + demo + ';\n' + '\n'.join((S / f).read_text(encoding='utf8') for f in ['core.js', 'views.js', 'forms.js', 'agilesat.js'])
+js = 'var DEMO_BASE = "2026-11-16";\nvar DEMO_DATA = ' + demo + ';\n' + '\n'.join((S / f).read_text(encoding='utf8') for f in ['core.js', 'views.js', 'mapa.js', 'forms.js', 'agilesat.js'])
 html = f'''<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -22,6 +22,8 @@ html = f'''<!DOCTYPE html>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <style>{css}</style>
 </head>
 <body>
