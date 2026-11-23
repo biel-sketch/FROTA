@@ -422,7 +422,7 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
         <span class="nav-label">Sair</span>
       </button>
-      <div style="text-align:center;font-size:9px;color:var(--text-faint);margin-top:8px;opacity:0.6;">build 2026-11-23-1038</div>
+      <div style="text-align:center;font-size:9px;color:var(--text-faint);margin-top:8px;opacity:0.6;">build 2026-11-23-1041</div>
     </div>
   </aside>
 
@@ -1397,14 +1397,14 @@ VIEWS.veiculos = function(){
   var html = panel('Veículos', table([
       {l:'Placa', f:function(v){ return esc(v.placa) + '<span class="sub">' + esc(v.modelo || '') + (v.ano ? ' · ' + esc(v.ano) : '') + '</span>'; }},
       {l:'Tipo', k:'tipo'}, {l:'Combustível', k:'combustivel'},
-      {l:'Hodômetro', n:1, f:function(v){ return v.kmAtual ? fmtN(v.kmAtual) + ' km' : '—'; }},
+      {l:'Hodômetro', n:1, f:function(v){ return (v.kmAtual ? fmtN(v.kmAtual) + ' km' : '—') + (v.rastreadorId ? '<span class="sub">automático</span>' : ''); }},
       {l:'Meta', n:1, f:function(v){ return v.metaConsumo ? fmtN(v.metaConsumo, 1) + ' km/l' : '—'; }},
       {l:'Motorista', k:'motorista'},
       {l:'ID AgileSat', f:function(v){ return v.rastreadorId ? '<code>' + esc(v.rastreadorId) + '</code>' : '<span class="mono">—</span>'; }},
       {l:'Licenciamento', f:function(v){ return docPill(v.vencLicenciamento); }},
       {l:'Seguro', f:function(v){ return docPill(v.vencSeguro); }},
       {l:'Status', f:function(v){ return v.status === 'Em manutenção' ? pill('amber', 'Em manutenção') : v.status === 'Parado' ? pill('gray', 'Parado') : pill('teal', 'Ativo'); }}
-    ], vs, {empty:'Nenhum veículo cadastrado.', acts:function(v){ return (can('lancar') ? '<button class="btn btn-sm" data-act="lancar-km" data-id="'+esc(v._id)+'">Lançar KM</button> ' : '') + acts('veiculos', v._id); }}), '', 'o ID no AgileSat é opcional: liga o veículo ao rastreador');
+    ], vs, {empty:'Nenhum veículo cadastrado.', acts:function(v){ return (can('lancar') && !v.rastreadorId ? '<button class="btn btn-sm" data-act="lancar-km" data-id="'+esc(v._id)+'">Lançar KM</button> ' : '') + acts('veiculos', v._id); }}), '', 'o ID no AgileSat é opcional: liga o veículo ao rastreador');
   return {html:html, actions: exportBtn('veiculos') + (can('cadastros') ? '<button class="btn" data-act="importar" data-col="veiculos">Importar Excel</button>' : '') + newBtn('veiculos', 'Veículo')};
 };
 
@@ -1678,6 +1678,13 @@ function openForm(col, id){
   }).join('');
   openModal('<div class="modal-title">'+(id ? 'Editar ' : 'Novo ') + sc.label+'</div><form id="mform"><div class="modal-grid">'+fields+'</div><div class="form-error" id="mform-err"></div>' +
     '<div class="modal-actions"><button type="button" class="btn btn-ghost" data-act="fechar">Cancelar</button><button type="submit" class="btn btn-primary">Salvar</button></div></form>', sc.fields.length > 8);
+  // veículo com rastreador: o hodômetro é automático; só o administrador corrige
+  if(col === 'veiculos' && id && DB.veiculos[id] && DB.veiculos[id].rastreadorId){
+    var ik = $('#mform [name=kmAtual]');
+    if(ik){ var dica = document.createElement('div'); dica.className = 'hint';
+      dica.textContent = can('admin') ? 'Atualizado automaticamente pelo rastreador. Altere só para corrigir o valor real; a partir daí ele continua somando sozinho.' : 'Atualizado automaticamente pelo rastreador.';
+      ik.parentNode.appendChild(dica); if(!can('admin')) ik.readOnly = true; }
+  }
   $('#mform').addEventListener('submit', function(e){
     e.preventDefault();
     var fm = this, data = {}, falta = [];

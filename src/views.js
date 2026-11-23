@@ -708,14 +708,14 @@ VIEWS.veiculos = function(){
   var html = panel('Veículos', table([
       {l:'Placa', f:function(v){ return esc(v.placa) + '<span class="sub">' + esc(v.modelo || '') + (v.ano ? ' · ' + esc(v.ano) : '') + '</span>'; }},
       {l:'Tipo', k:'tipo'}, {l:'Combustível', k:'combustivel'},
-      {l:'Hodômetro', n:1, f:function(v){ return v.kmAtual ? fmtN(v.kmAtual) + ' km' : '—'; }},
+      {l:'Hodômetro', n:1, f:function(v){ return (v.kmAtual ? fmtN(v.kmAtual) + ' km' : '—') + (v.rastreadorId ? '<span class="sub">automático</span>' : ''); }},
       {l:'Meta', n:1, f:function(v){ return v.metaConsumo ? fmtN(v.metaConsumo, 1) + ' km/l' : '—'; }},
       {l:'Motorista', k:'motorista'},
       {l:'ID AgileSat', f:function(v){ return v.rastreadorId ? '<code>' + esc(v.rastreadorId) + '</code>' : '<span class="mono">—</span>'; }},
       {l:'Licenciamento', f:function(v){ return docPill(v.vencLicenciamento); }},
       {l:'Seguro', f:function(v){ return docPill(v.vencSeguro); }},
       {l:'Status', f:function(v){ return v.status === 'Em manutenção' ? pill('amber', 'Em manutenção') : v.status === 'Parado' ? pill('gray', 'Parado') : pill('teal', 'Ativo'); }}
-    ], vs, {empty:'Nenhum veículo cadastrado.', acts:function(v){ return (can('lancar') ? '<button class="btn btn-sm" data-act="lancar-km" data-id="'+esc(v._id)+'">Lançar KM</button> ' : '') + acts('veiculos', v._id); }}), '', 'o ID no AgileSat é opcional: liga o veículo ao rastreador');
+    ], vs, {empty:'Nenhum veículo cadastrado.', acts:function(v){ return (can('lancar') && !v.rastreadorId ? '<button class="btn btn-sm" data-act="lancar-km" data-id="'+esc(v._id)+'">Lançar KM</button> ' : '') + acts('veiculos', v._id); }}), '', 'o ID no AgileSat é opcional: liga o veículo ao rastreador');
   return {html:html, actions: exportBtn('veiculos') + (can('cadastros') ? '<button class="btn" data-act="importar" data-col="veiculos">Importar Excel</button>' : '') + newBtn('veiculos', 'Veículo')};
 };
 

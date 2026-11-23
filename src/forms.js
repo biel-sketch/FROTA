@@ -86,6 +86,13 @@ function openForm(col, id){
   }).join('');
   openModal('<div class="modal-title">'+(id ? 'Editar ' : 'Novo ') + sc.label+'</div><form id="mform"><div class="modal-grid">'+fields+'</div><div class="form-error" id="mform-err"></div>' +
     '<div class="modal-actions"><button type="button" class="btn btn-ghost" data-act="fechar">Cancelar</button><button type="submit" class="btn btn-primary">Salvar</button></div></form>', sc.fields.length > 8);
+  // veículo com rastreador: o hodômetro é automático; só o administrador corrige
+  if(col === 'veiculos' && id && DB.veiculos[id] && DB.veiculos[id].rastreadorId){
+    var ik = $('#mform [name=kmAtual]');
+    if(ik){ var dica = document.createElement('div'); dica.className = 'hint';
+      dica.textContent = can('admin') ? 'Atualizado automaticamente pelo rastreador. Altere só para corrigir o valor real; a partir daí ele continua somando sozinho.' : 'Atualizado automaticamente pelo rastreador.';
+      ik.parentNode.appendChild(dica); if(!can('admin')) ik.readOnly = true; }
+  }
   $('#mform').addEventListener('submit', function(e){
     e.preventDefault();
     var fm = this, data = {}, falta = [];
