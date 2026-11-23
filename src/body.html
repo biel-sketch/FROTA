@@ -87,12 +87,26 @@
     <div class="demo-banner">Modo demonstração: os dados estão salvos só neste navegador. Configure o Firebase para usar com a equipe.</div>
     <div class="toolbar" id="filters">
       <select class="tb-select" id="f-period">
+        <option value="hoje">Hoje</option>
+        <option value="ontem">Ontem</option>
+        <option value="semana">Esta semana</option>
+        <option value="semana-ant">Semana passada</option>
         <option value="mes">Este mês</option>
+        <option value="mes-ant">Mês passado</option>
         <option value="30d" selected>Últimos 30 dias</option>
         <option value="90d">Últimos 90 dias</option>
         <option value="ano">Este ano</option>
         <option value="tudo">Todo o período</option>
+        <option value="dia">Dia específico…</option>
+        <option value="sem">Semana específica…</option>
+        <option value="entre">Entre datas…</option>
       </select>
+      <span id="f-datas" style="display:none;align-items:center;gap:8px">
+        <input type="date" class="tb-select" id="f-d1">
+        <span id="f-ate-txt" style="color:var(--muted);font-size:13px">até</span>
+        <input type="date" class="tb-select" id="f-d2">
+        <span id="f-sem-txt" class="mono" style="color:var(--muted);font-size:12px"></span>
+      </span>
       <select class="tb-select" id="f-veic"></select>
       <span class="spacer"></span>
       <span id="view-actions" style="display:flex;gap:10px;flex-wrap:wrap"></span>

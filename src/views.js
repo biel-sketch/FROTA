@@ -25,7 +25,7 @@ var MODULES = [
     {id:'sistema', label:'Sistema', view:'sistema', admin:true}]}
 ];
 var curMod = 'inicio', curSub = 'resumo', curView = 'resumo', renderQueued = false, modalRefresh = null, selTrip = null;
-var F = {period:'30d', veic:''};
+var F = {period:'30d', veic:'', d1:'', d2:''};
 
 function modById(id){ return MODULES.find(function(m){ return m.id === id; }) || MODULES[0]; }
 function scheduleRender(){
@@ -44,6 +44,7 @@ function showModule(modId, subId){
   $('#subnav').innerHTML = subs.length > 1 ? subs.map(function(x){ return '<div class="subtab'+(x.id === sub.id ? ' active' : '')+'" data-sub="'+x.id+'">'+esc(x.label)+'</div>'; }).join('') : '';
   $('#subnav').style.display = subs.length > 1 ? '' : 'none';
   $('#f-period').style.display = sub.filtros ? '' : 'none';
+  ajustaDatas();
   $('#f-veic').style.display = sub.filtros ? '' : 'none';
   window.scrollTo(0, 0);
   renderAll();
@@ -53,7 +54,9 @@ function initUI(){
   $('#nav').addEventListener('click', function(e){ var n = e.target.closest('.nav-item'); if(n) showModule(n.dataset.mod); });
   $('#subnav').addEventListener('click', function(e){ var t = e.target.closest('.subtab'); if(t) showModule(curMod, t.dataset.sub); });
   $('#sidebar-toggle-btn').addEventListener('click', function(){ $('#app-sidebar').classList.toggle('collapsed'); });
-  $('#f-period').addEventListener('change', function(){ F.period = this.value; scheduleRender(); });
+  $('#f-period').addEventListener('change', function(){ F.period = this.value; ajustaDatas(true); scheduleRender(); });
+  $('#f-d1').addEventListener('change', function(){ F.d1 = this.value; if(F.period === 'entre' && F.d2 && F.d2 < F.d1){ F.d2 = F.d1; $('#f-d2').value = F.d1; } ajustaDatas(); scheduleRender(); });
+  $('#f-d2').addEventListener('change', function(){ F.d2 = this.value; ajustaDatas(); scheduleRender(); });
   $('#f-veic').addEventListener('change', function(){ F.veic = this.value; scheduleRender(); });
   document.addEventListener('click', onAction);
   $('#modal').addEventListener('click', function(e){ if(e.target.id === 'modal') closeModal(); });
@@ -75,9 +78,36 @@ function updateBadges(){
 // =====================================================================
 // PERÍODO E CÁLCULOS
 // =====================================================================
+function iso(d){ return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+function segunda(d){ var x = new Date(d); x.setHours(0,0,0,0); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; }
+function diaDe(s){ var d = s ? new Date(s + 'T00:00:00') : new Date(); if(isNaN(d)) d = new Date(); d.setHours(0,0,0,0); return d; }
+function fimDia(d){ var x = new Date(d); x.setHours(23,59,59,999); return x; }
+// mostra/esconde os campos de data conforme o período escolhido
+function ajustaDatas(trocou){
+  var p = F.period, box = $('#f-datas'); if(!box) return;
+  var usa = p === 'dia' || p === 'sem' || p === 'entre';
+  box.style.display = usa && $('#f-period').style.display !== 'none' ? 'flex' : 'none';
+  if(!usa) return;
+  if(trocou || !F.d1){ F.d1 = F.d1 || iso(new Date()); }
+  if(p === 'entre' && !F.d2){ var x = diaDe(F.d1); x.setDate(x.getDate() + 6); F.d2 = iso(x) > iso(new Date()) ? iso(new Date()) : iso(x); }
+  $('#f-d1').value = F.d1; $('#f-d2').value = F.d2 || '';
+  $('#f-d2').style.display = p === 'entre' ? '' : 'none';
+  $('#f-ate-txt').style.display = p === 'entre' ? '' : 'none';
+  $('#f-d1').title = p === 'sem' ? 'Escolha qualquer dia da semana' : '';
+  if(p === 'sem'){ var r = range(); $('#f-sem-txt').textContent = 'semana de ' + r[0].toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit'}) + ' a ' + r[1].toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit', year:'numeric'}); }
+  else $('#f-sem-txt').textContent = '';
+}
 function range(){
   var now = new Date(), end = new Date(now); end.setHours(23,59,59,999);
   var st = new Date(now); st.setHours(0,0,0,0);
+  if(F.period === 'hoje') return [st, end];
+  if(F.period === 'ontem'){ st.setDate(st.getDate() - 1); return [st, fimDia(st)]; }
+  if(F.period === 'semana') return [segunda(now), end];
+  if(F.period === 'semana-ant'){ var s0 = segunda(now); s0.setDate(s0.getDate() - 7); var e0 = new Date(s0); e0.setDate(e0.getDate() + 6); return [s0, fimDia(e0)]; }
+  if(F.period === 'mes-ant') return [new Date(now.getFullYear(), now.getMonth() - 1, 1), fimDia(new Date(now.getFullYear(), now.getMonth(), 0))];
+  if(F.period === 'dia'){ var d = diaDe(F.d1); return [d, fimDia(d)]; }
+  if(F.period === 'sem'){ var s1 = segunda(diaDe(F.d1)), e1 = new Date(s1); e1.setDate(e1.getDate() + 6); return [s1, fimDia(e1)]; }
+  if(F.period === 'entre'){ var a1 = diaDe(F.d1), b1 = diaDe(F.d2 || F.d1); if(b1 < a1){ var tmp = a1; a1 = b1; b1 = tmp; } return [a1, fimDia(b1)]; }
   if(F.period === 'mes') st = new Date(now.getFullYear(), now.getMonth(), 1);
   else if(F.period === '30d') st.setDate(st.getDate() - 30);
   else if(F.period === '90d') st.setDate(st.getDate() - 90);
