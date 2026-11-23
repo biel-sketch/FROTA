@@ -421,7 +421,7 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
         <span class="nav-label">Sair</span>
       </button>
-      <div style="text-align:center;font-size:9px;color:var(--text-faint);margin-top:8px;opacity:0.6;">build 2026-11-23-1004</div>
+      <div style="text-align:center;font-size:9px;color:var(--text-faint);margin-top:8px;opacity:0.6;">build 2026-11-23-1009</div>
     </div>
   </aside>
 
@@ -1587,6 +1587,9 @@ function openForm(col, id){
     if(['abastecimentos','manutencoes','leituras','viagens','posicoes'].indexOf(col) >= 0 && kmLido && DB.veiculos[rec.veiculoId] && num(kmLido) > num(DB.veiculos[rec.veiculoId].kmAtual)){
       p['veiculos/' + rec.veiculoId + '/kmAtual'] = num(kmLido); extra = ' — hodômetro atualizado';
     }
+    // hodômetro corrigido à mão: guarda a leitura atual do rastreador como ponto de partida da soma
+    if(col === 'veiculos' && num(rec.kmAtual) !== num(cur.kmAtual)){ var rr = rastreadorAgora(key); if(rr != null) rec.kmRastreador = rr; }
+    if(col !== 'veiculos' && rec.veiculoId && p['veiculos/' + rec.veiculoId + '/kmAtual'] != null){ var r2 = rastreadorAgora(rec.veiculoId); if(r2 != null) p['veiculos/' + rec.veiculoId + '/kmRastreador'] = r2; }
     // viagem manual: postos marcados viram visitas
     if(col === 'viagens' && !id && rec.postosVisitados && rec.postosVisitados.length){
       rec.postosVisitados.forEach(function(pid){ p['visitas/' + store.key()] = {postoId:pid, veiculoId:rec.veiculoId, motorista:rec.motorista || '', chegada:rec.inicio, fonte:'Manual', obs:'Registrada na viagem ' + (rec.destino || ''), viagemId:key, atualizadoEm:nowTs()}; });
@@ -1818,6 +1821,8 @@ function excluirVeiculo(id, r){
 function voltarPuxar(rid){
   save((function(){ var o = {}; o['config/rastreadorIgnorar/' + rid] = null; return o; })(), 'Voltou a puxar veículo do rastreador', rid).then(function(){ toast('Na próxima atualização ele volta a ser puxado.'); });
 }
+
+function rastreadorAgora(vid){ var po = (DB.posicoes || {})[vid]; return po && po.kmRastreador != null && po.kmRastreador !== '' ? num(po.kmRastreador) : null; }
 
 // =====================================================================
 // INTEGRAÇÃO AGILESAT + SISTEMA

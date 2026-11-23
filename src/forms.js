@@ -121,6 +121,9 @@ function openForm(col, id){
     if(['abastecimentos','manutencoes','leituras','viagens','posicoes'].indexOf(col) >= 0 && kmLido && DB.veiculos[rec.veiculoId] && num(kmLido) > num(DB.veiculos[rec.veiculoId].kmAtual)){
       p['veiculos/' + rec.veiculoId + '/kmAtual'] = num(kmLido); extra = ' — hodômetro atualizado';
     }
+    // hodômetro corrigido à mão: guarda a leitura atual do rastreador como ponto de partida da soma
+    if(col === 'veiculos' && num(rec.kmAtual) !== num(cur.kmAtual)){ var rr = rastreadorAgora(key); if(rr != null) rec.kmRastreador = rr; }
+    if(col !== 'veiculos' && rec.veiculoId && p['veiculos/' + rec.veiculoId + '/kmAtual'] != null){ var r2 = rastreadorAgora(rec.veiculoId); if(r2 != null) p['veiculos/' + rec.veiculoId + '/kmRastreador'] = r2; }
     // viagem manual: postos marcados viram visitas
     if(col === 'viagens' && !id && rec.postosVisitados && rec.postosVisitados.length){
       rec.postosVisitados.forEach(function(pid){ p['visitas/' + store.key()] = {postoId:pid, veiculoId:rec.veiculoId, motorista:rec.motorista || '', chegada:rec.inicio, fonte:'Manual', obs:'Registrada na viagem ' + (rec.destino || ''), viagemId:key, atualizadoEm:nowTs()}; });
@@ -352,3 +355,5 @@ function excluirVeiculo(id, r){
 function voltarPuxar(rid){
   save((function(){ var o = {}; o['config/rastreadorIgnorar/' + rid] = null; return o; })(), 'Voltou a puxar veículo do rastreador', rid).then(function(){ toast('Na próxima atualização ele volta a ser puxado.'); });
 }
+
+function rastreadorAgora(vid){ var po = (DB.posicoes || {})[vid]; return po && po.kmRastreador != null && po.kmRastreador !== '' ? num(po.kmRastreador) : null; }

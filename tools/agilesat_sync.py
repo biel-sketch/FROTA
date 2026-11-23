@@ -311,13 +311,29 @@ def sincronizar(api, fb, horas, teste=False):
         else:
             if str(v.get("rastreadorId", "")) != rid:
                 paths[f"veiculos/{vid}/rastreadorId"] = rid
-            if km and km > num(v.get("kmAtual")):
-                paths[f"veiculos/{vid}/kmAtual"] = round(km)
-        ids[rid] = (vid, v)
+        # hodômetro: o painel guarda o valor real (pode ter sido corrigido à mão) e soma o que
+        # o rastreador andou desde a última leitura dele (kmRastreador)
+        ajuste = 0.0
+        if km:
+            km_at, ant = num(v.get("kmAtual")), num(v.get("kmRastreador"), None)
+            if ant is not None:
+                delta = km - ant
+                if 0 < delta < 5000:
+                    km_at += delta
+            elif km > km_at:
+                km_at = km
+            if round(km_at) != round(num(v.get("kmAtual"))):
+                paths[f"veiculos/{vid}/kmAtual"] = round(km_at)
+            paths[f"veiculos/{vid}/kmRastreador"] = round(km, 1)
+            v["kmAtual"], v["kmRastreador"] = round(km_at), round(km, 1)
+            ajuste = round(km_at) - km
+        ids[rid] = (vid, v, ajuste)
         p = ponto(ev) if ev else None
         if p:
             paths[f"posicoes/{vid}"] = {"veiculoId": vid, "lat": p["lat"], "lng": p["lng"], "velocidade": p["vel"],
-                                        "ignicao": p["ign"], "dataHora": p["t"], "km": round(p["hod"]) if p["hod"] else None,
+                                        "ignicao": p["ign"], "dataHora": p["t"],
+                                        "km": round(p["hod"] + ajuste) if p["hod"] else None,
+                                        "kmRastreador": round(p["hod"], 1) if p["hod"] else None,
                                         "endereco": "", "fonte": "AgileSat"}
             cont["pos"] += 1
 
@@ -325,7 +341,7 @@ def sincronizar(api, fb, horas, teste=False):
     fim = int(time.time())
     ini = fim - int((float(horas) + 2) * 3600)
     novas_viagens, pts_por_veic = {}, {}
-    for rid, (vid, v) in ids.items():
+    for rid, (vid, v, ajuste) in ids.items():
         try:
             evs = api.get(f"/events/interval/id/{rid}/begin/{ini}/end/{fim}")
         except Exception as e:
@@ -342,6 +358,9 @@ def sincronizar(api, fb, horas, teste=False):
             tid = re.sub(r"[.#$\[\]/]", "_", f"ag_{rid}_{t['inicio']}")
             reg = {"veiculoId": vid, "motorista": v.get("motorista", ""), "origem": "", "destino": "", "fonte": "AgileSat"}
             reg.update({k: val for k, val in t.items() if val is not None})
+            for kk in ("kmInicial", "kmFinal"):
+                if reg.get(kk) is not None and ajuste:
+                    reg[kk] = round(reg[kk] + ajuste)
             novas_viagens[tid] = reg
     for tid, t in novas_viagens.items():
         paths[f"viagens/{tid}"] = t
