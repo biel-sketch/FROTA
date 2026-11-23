@@ -17,10 +17,10 @@ var SCHEMA = {
     {k:'vencCnh', l:'Vencimento da CNH', t:'date'}, {k:'telefone', l:'Telefone'}]},
   abastecimentos:{label:'abastecimento', fields:[
     {k:'tipo', l:'Tipo de lançamento', t:'select', opts:['Mensal (total do mês)','Avulso (um abastecimento)']},
-    {k:'data', l:'Data', t:'date', req:1, hint:'No mensal, qualquer dia do mês de referência.'}, {k:'veiculoId', l:'Veículo', t:'veic', req:1}, {k:'motorista', l:'Motorista', t:'motorista'},
+    {k:'data', l:'Data', t:'date', req:1}, {k:'veiculoId', l:'Veículo', t:'veic', req:1}, {k:'motorista', l:'Motorista', t:'motorista'},
     {k:'posto', l:'Posto de combustível'}, {k:'combustivel', l:'Combustível', t:'select', opts:['Gasolina','Etanol','Diesel S10','Diesel S500','GNV','Arla 32']},
     {k:'litros', l:'Litros', t:'number', step:'0.01', req:1}, {k:'valor', l:'Valor total (R$)', t:'number', step:'0.01', req:1},
-    {k:'km', l:'Hodômetro (km)', t:'number', hint:'Opcional no mensal: o KM do mês vem do rastreador.'}, {k:'tanqueCheio', l:'Tanque cheio?', t:'select', opts:['Sim','Não']}]},
+    {k:'km', l:'Hodômetro (km)', t:'number'}, {k:'tanqueCheio', l:'Tanque cheio?', t:'select', opts:['Sim','Não']}]},
   manutencoes:{label:'manutenção', fields:[
     {k:'veiculoId', l:'Veículo', t:'veic', req:1}, {k:'tipo', l:'Tipo', t:'select', opts:['Preventiva','Corretiva']},
     {k:'servico', l:'Serviço', req:1}, {k:'status', l:'Situação', t:'select', opts:['Realizada','Agendada']},
@@ -86,6 +86,16 @@ function openForm(col, id){
   }).join('');
   openModal('<div class="modal-title">'+(id ? 'Editar ' : 'Novo ') + sc.label+'</div><form id="mform"><div class="modal-grid">'+fields+'</div><div class="form-error" id="mform-err"></div>' +
     '<div class="modal-actions"><button type="button" class="btn btn-ghost" data-act="fechar">Cancelar</button><button type="submit" class="btn btn-primary">Salvar</button></div></form>', sc.fields.length > 8);
+  // abastecimento mensal: sem "tanque cheio" e sem hodômetro (o KM vem do rastreador)
+  if(col === 'abastecimentos'){
+    var selT = $('#mform [name=tipo]');
+    var alterna = function(){
+      var men = ehMensal({tipo:selT.value});
+      ['tanqueCheio', 'km'].forEach(function(k){ var el = $('#mform [name=' + k + ']'); if(el) el.closest('.modal-field').style.display = men ? 'none' : ''; });
+      var ld = $('#mform [name=data]'); if(ld) ld.closest('.modal-field').querySelector('label').textContent = men ? 'Mês de referência (qualquer dia do mês) *' : 'Data do abastecimento *';
+    };
+    if(selT){ selT.addEventListener('change', alterna); alterna(); }
+  }
   // veículo com rastreador: o hodômetro é automático; só o administrador corrige
   if(col === 'veiculos' && id && DB.veiculos[id] && DB.veiculos[id].rastreadorId){
     var ik = $('#mform [name=kmAtual]');
@@ -116,7 +126,7 @@ function openForm(col, id){
     if(col === 'posicoes') data.ignicao = data.ignicao === 'Ligado';
     if(col === 'abastecimentos'){
       if(!data.km && !ehMensal(data)){ var e4 = $('#mform-err'); e4.textContent = 'No abastecimento avulso, informe o hodômetro.'; e4.style.display = 'block'; return; }
-      if(ehMensal(data) && data.data) data.data = fimDoMes(data.data);
+      if(ehMensal(data)){ if(data.data) data.data = fimDoMes(data.data); data.tanqueCheio = ''; data.km = ''; }
     }
     var rec = Object.assign({}, clean(cur), clean(data));
     sc.fields.forEach(function(f){ if(data[f.k] === '' || data[f.k] == null) delete rec[f.k]; });
