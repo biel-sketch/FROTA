@@ -422,7 +422,7 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
         <span class="nav-label">Sair</span>
       </button>
-      <div style="text-align:center;font-size:9px;color:var(--text-faint);margin-top:8px;opacity:0.6;">build 2026-11-23-1041</div>
+      <div style="text-align:center;font-size:9px;color:var(--text-faint);margin-top:8px;opacity:0.6;">build 2026-11-24-0825</div>
     </div>
   </aside>
 
@@ -810,7 +810,7 @@ function placaDe(id){ var v = DB.veiculos[id]; return v ? v.placa : '—'; }
 function postoDe(id){ return DB.postos[id] || null; }
 function weeksInP(){
   var r = range(), st = r[0];
-  if(F.period === 'tudo'){ var ds = vals(DB.visitas).map(function(v){ return toDate(v.chegada); }).filter(Boolean); st = ds.length ? new Date(Math.min.apply(null, ds)) : new Date(); }
+  if(F.period === 'tudo'){ var ds = visitasCliente().map(function(v){ return toDate(v.chegada); }).filter(Boolean); st = ds.length ? new Date(Math.min.apply(null, ds)) : new Date(); }
   return Math.max(1/7, (r[1] - st) / (7 * 864e5));
 }
 
@@ -922,9 +922,9 @@ function combEstimadoMes(vid, k){
 function aderencia(){
   var w = weeksInP();
   return vals(DB.postos).sort(function(a, b){ return String(a.nome).localeCompare(String(b.nome)); }).map(function(p){
-    var vis = vals(DB.visitas).filter(function(v){ return v.postoId === p._id && inP(v.chegada) && (!F.veic || v.veiculoId === F.veic); });
+    var vis = visitasCliente().filter(function(v){ return v.postoId === p._id && inP(v.chegada) && (!F.veic || v.veiculoId === F.veic); });
     var esperado = num(p.freqSemana) * w;
-    var ult = vals(DB.visitas).filter(function(v){ return v.postoId === p._id; }).map(function(v){ return v.chegada; }).sort().pop();
+    var ult = visitasCliente().filter(function(v){ return v.postoId === p._id; }).map(function(v){ return v.chegada; }).sort().pop();
     var perm = vis.map(function(v){ var a = toDate(v.chegada), b = toDate(v.saida); return a && b ? (b - a) / 6e4 : null; }).filter(function(x){ return x != null && x >= 0; });
     return {p:p, n:vis.length, esperado:esperado, pct:esperado ? Math.min(100, vis.length / esperado * 100) : null, ult:ult, perm:perm.length ? perm.reduce(function(s, x){ return s + x; }, 0) / perm.length : null};
   });
@@ -1319,7 +1319,7 @@ VIEWS.pedagios = function(){
 
 VIEWS.visitas = function(){
   var ad = aderencia();
-  var vis = vals(DB.visitas).filter(function(v){ return inP(v.chegada) && (!F.veic || v.veiculoId === F.veic); }).sort(function(a, b){ return String(b.chegada).localeCompare(String(a.chegada)); });
+  var vis = visitasCliente().filter(function(v){ return inP(v.chegada) && (!F.veic || v.veiculoId === F.veic); }).sort(function(a, b){ return String(b.chegada).localeCompare(String(a.chegada)); });
   var tv = ad.reduce(function(s, a){ return s + a.n; }, 0), te = ad.reduce(function(s, a){ return s + a.esperado; }, 0);
   var auto = vis.filter(function(v){ return /autom/i.test(v.fonte || ''); }).length;
   var html = '<div class="stats five">' +
@@ -1451,7 +1451,7 @@ function gerarPDF(){
     ], rows, true);
   var dentro = function(col, campo){ return vals(DB[col]).filter(function(x){ return vOk(x.veiculoId) && inP(x[campo]); }).sort(function(a, b){ return String(a[campo]) < String(b[campo]) ? -1 : 1; }); };
   var ab = dentro('abastecimentos', 'data'), mn = dentro('manutencoes', 'data').filter(function(m){ return m.status !== 'Agendada'; }), pd = dentro('pedagios', 'data');
-  var vis = dentro('visitas', 'chegada');
+  var vis = dentro('visitas', 'chegada').filter(function(v){ return ehCliente(DB.postos[v.postoId]); });
   if(ab.length) html += '<h2>Abastecimentos</h2>' + tb([{l:'Data', f:function(x){ return fmtD(x.data); }}, {l:'Veículo', f:function(x){ return esc(placaDe(x.veiculoId)); }}, {l:'Posto', f:function(x){ return esc(x.posto || ''); }}, {l:'Litros', n:1, f:function(x){ return fmtN(x.litros, 1); }}, {l:'KM', n:1, f:function(x){ return x.km ? fmtN(x.km) : '—'; }}, {l:'Valor', n:1, f:function(x){ return fmtR(x.valor); }, t:function(){ return fmtR(ab.reduce(function(t, x){ return t + num(x.valor); }, 0)); }}], ab, true);
   if(mn.length) html += '<h2>Manutenções</h2>' + tb([{l:'Data', f:function(x){ return fmtD(x.data); }}, {l:'Veículo', f:function(x){ return esc(placaDe(x.veiculoId)); }}, {l:'Serviço', f:function(x){ return esc(x.servico || ''); }}, {l:'Oficina', f:function(x){ return esc(x.oficina || ''); }}, {l:'KM', n:1, f:function(x){ return x.km ? fmtN(x.km) : '—'; }}, {l:'Custo', n:1, f:function(x){ return fmtR(x.custo); }, t:function(){ return fmtR(mn.reduce(function(t, x){ return t + num(x.custo); }, 0)); }}], mn, true);
   if(pd.length) html += '<h2>Pedágios</h2>' + tb([{l:'Data', f:function(x){ return fmtD(x.data); }}, {l:'Veículo', f:function(x){ return esc(placaDe(x.veiculoId)); }}, {l:'Praça', f:function(x){ return esc(x.praca || x.local || ''); }}, {l:'Valor', n:1, f:function(x){ return fmtR(x.valor); }, t:function(){ return fmtR(pd.reduce(function(t, x){ return t + num(x.valor); }, 0)); }}], pd, true);
@@ -1473,6 +1473,19 @@ function gerarPDF(){
     '<script>window.onload=function(){setTimeout(function(){window.print()},400)}<\/script></body></html>');
   w.document.close();
 }
+
+// postos: só "Cliente" gera e mostra visitas (escritório, residência etc. ficam de fora)
+function tipoPosto(p){
+  if(!p) return '';
+  if(p.tipo) return p.tipo;
+  var n = String(p.nome || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+  if(/^ESCRITORIO|^BASE /.test(n)) return 'Escritório / base';
+  if(/^RESIDENCIA|^CASA /.test(n)) return 'Residência';
+  if(/^PEDAGIO/.test(n)) return 'Outro';
+  return 'Cliente';
+}
+function ehCliente(p){ return !!p && tipoPosto(p) === 'Cliente'; }
+function visitasCliente(){ return vals(DB.visitas).filter(function(v){ return ehCliente(DB.postos[v.postoId]); }); }
 
 // =====================================================================
 // MAPAS (Leaflet): ruas com nome, satélite e tela cheia
@@ -1556,7 +1569,7 @@ function iniciarMapaViagem(t){
   L.marker([+b[0], +b[1]], {icon:pinIcon('#F2596B', 'C')}).addTo(m).bindPopup('<b>Chegada</b><br>' + fmtDH(b[2]));
   var bounds = linha.getBounds(), perto = bounds.pad(0.25);
   var visitados = {};
-  vals(DB.visitas).forEach(function(v){ if(v.veiculoId === t.veiculoId && v.chegada >= String(t.inicio).slice(0, 16) && v.chegada <= String(t.fim || t.inicio).slice(0, 16)) visitados[v.postoId] = 1; });
+  visitasCliente().forEach(function(v){ if(v.veiculoId === t.veiculoId && v.chegada >= String(t.inicio).slice(0, 16) && v.chegada <= String(t.fim || t.inicio).slice(0, 16)) visitados[v.postoId] = 1; });
   (t.postosVisitados || []).forEach(function(id){ visitados[id] = 1; });
   vals(DB.postos).forEach(function(p){
     if(p.lat === '' || p.lat == null || !perto.contains([+p.lat, +p.lng])) return;
@@ -1642,7 +1655,7 @@ var SCHEMA = {
     {k:'ignicao', l:'Situação', t:'select', opts:['Desligado','Ligado']}, {k:'velocidade', l:'Velocidade (km/h)', t:'number'},
     {k:'km', l:'Hodômetro (km), se souber', t:'number'}]},
   postos:{label:'posto de trabalho', fields:[
-    {k:'nome', l:'Nome do posto', req:1}, {k:'cliente', l:'Cliente / contrato'}, {k:'endereco', l:'Endereço', full:1},
+    {k:'nome', l:'Nome do posto', req:1}, {k:'tipo', l:'Tipo', t:'select', opts:['Cliente','Escritório / base','Residência','Outro'], hint:'Só postos do tipo Cliente geram visitas.'}, {k:'cliente', l:'Cliente / contrato'}, {k:'endereco', l:'Endereço', full:1},
     {k:'lat', l:'Latitude', t:'number', step:'any', geo:1}, {k:'lng', l:'Longitude', t:'number', step:'any'},
     {k:'raio', l:'Raio da cerca (metros)', t:'number'}, {k:'freqSemana', l:'Visitas esperadas por semana', t:'number', step:'0.5'}]},
   visitas:{label:'visita', fields:[
@@ -1776,6 +1789,7 @@ function onAction(e){
   if(a === 'excluir'){
     var col = t.dataset.col, id = t.dataset.id, r = DB[col][id] || {};
     if(col === 'veiculos'){ excluirVeiculo(id, r); return; }
+    if(col === 'postos'){ excluirPosto(id, r); return; }
     confirmBox('Excluir ' + SCHEMA[col].label, 'Excluir <b>' + esc(descRec(col, r)) + '</b>? Não dá para desfazer.', 'Excluir', function(){
       var p = {}; p[col + '/' + id] = null;
       if(col === 'veiculos') p['posicoes/' + id] = null;
@@ -1845,7 +1859,7 @@ function exportar(key){
     return;
   }
   var map = {abastecimentos:c.ab, manutencoes:vals(DB.manutencoes).filter(function(m){ return vOk(m.veiculoId) && (m.status === 'Agendada' || inP(m.data)); }), pedagios:c.pd, viagens:c.vg,
-    visitas:vals(DB.visitas).filter(function(v){ return inP(v.chegada); }), leituras:vals(DB.leituras).filter(function(l){ return vOk(l.veiculoId) && inP(l.data); }), posicoes:vals(DB.posicoes), postos:vals(DB.postos), veiculos:vals(DB.veiculos), motoristas:vals(DB.motoristas)};
+    visitas:visitasCliente().filter(function(v){ return inP(v.chegada); }), leituras:vals(DB.leituras).filter(function(l){ return vOk(l.veiculoId) && inP(l.data); }), posicoes:vals(DB.posicoes), postos:vals(DB.postos), veiculos:vals(DB.veiculos), motoristas:vals(DB.motoristas)};
   xlsxDownload('frota_' + key, [{nome:key, rows:rowsOf(key, map[key] || [])}]);
 }
 function baixarModelo(col){
@@ -1976,6 +1990,16 @@ function rastreadorAgora(vid){ var po = (DB.posicoes || {})[vid]; return po && p
 
 function ehMensal(a){ return /^mensal/i.test(String(a && a.tipo || '')); }
 function fimDoMes(s){ s = String(s).slice(0, 10); var y = +s.slice(0, 4), m = +s.slice(5, 7); if(!y || !m) return s; return y + '-' + String(m).padStart(2, '0') + '-' + String(new Date(y, m, 0).getDate()).padStart(2, '0'); }
+
+// Excluir posto leva junto as visitas dele
+function excluirPosto(id, r){
+  var p = {}, n = 0;
+  Object.keys(DB.visitas || {}).forEach(function(k){ if(DB.visitas[k].postoId === id){ p['visitas/' + k] = null; n++; } });
+  p['postos/' + id] = null;
+  confirmBox('Excluir posto', 'Excluir <b>' + esc(r.nome || '') + '</b>' + (n ? ' e as ' + n + ' visitas dele' : '') + '?' + (r.refId ? '<br><br>Ele também precisa ser apagado na AgileSat, senão volta na próxima atualização.' : '') + '<br>Não dá para desfazer.', 'Excluir', function(){
+    return save(p, 'Excluiu posto de trabalho', (r.nome || '') + (n ? ' + ' + n + ' visitas' : '')).then(function(){ toast('Posto excluído.'); });
+  });
+}
 
 // =====================================================================
 // INTEGRAÇÃO AGILESAT + SISTEMA

@@ -80,7 +80,7 @@ function iniciarMapaViagem(t){
   L.marker([+b[0], +b[1]], {icon:pinIcon('#F2596B', 'C')}).addTo(m).bindPopup('<b>Chegada</b><br>' + fmtDH(b[2]));
   var bounds = linha.getBounds(), perto = bounds.pad(0.25);
   var visitados = {};
-  vals(DB.visitas).forEach(function(v){ if(v.veiculoId === t.veiculoId && v.chegada >= String(t.inicio).slice(0, 16) && v.chegada <= String(t.fim || t.inicio).slice(0, 16)) visitados[v.postoId] = 1; });
+  visitasCliente().forEach(function(v){ if(v.veiculoId === t.veiculoId && v.chegada >= String(t.inicio).slice(0, 16) && v.chegada <= String(t.fim || t.inicio).slice(0, 16)) visitados[v.postoId] = 1; });
   (t.postosVisitados || []).forEach(function(id){ visitados[id] = 1; });
   vals(DB.postos).forEach(function(p){
     if(p.lat === '' || p.lat == null || !perto.contains([+p.lat, +p.lng])) return;

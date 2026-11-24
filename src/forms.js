@@ -50,7 +50,7 @@ var SCHEMA = {
     {k:'ignicao', l:'Situação', t:'select', opts:['Desligado','Ligado']}, {k:'velocidade', l:'Velocidade (km/h)', t:'number'},
     {k:'km', l:'Hodômetro (km), se souber', t:'number'}]},
   postos:{label:'posto de trabalho', fields:[
-    {k:'nome', l:'Nome do posto', req:1}, {k:'cliente', l:'Cliente / contrato'}, {k:'endereco', l:'Endereço', full:1},
+    {k:'nome', l:'Nome do posto', req:1}, {k:'tipo', l:'Tipo', t:'select', opts:['Cliente','Escritório / base','Residência','Outro'], hint:'Só postos do tipo Cliente geram visitas.'}, {k:'cliente', l:'Cliente / contrato'}, {k:'endereco', l:'Endereço', full:1},
     {k:'lat', l:'Latitude', t:'number', step:'any', geo:1}, {k:'lng', l:'Longitude', t:'number', step:'any'},
     {k:'raio', l:'Raio da cerca (metros)', t:'number'}, {k:'freqSemana', l:'Visitas esperadas por semana', t:'number', step:'0.5'}]},
   visitas:{label:'visita', fields:[
@@ -184,6 +184,7 @@ function onAction(e){
   if(a === 'excluir'){
     var col = t.dataset.col, id = t.dataset.id, r = DB[col][id] || {};
     if(col === 'veiculos'){ excluirVeiculo(id, r); return; }
+    if(col === 'postos'){ excluirPosto(id, r); return; }
     confirmBox('Excluir ' + SCHEMA[col].label, 'Excluir <b>' + esc(descRec(col, r)) + '</b>? Não dá para desfazer.', 'Excluir', function(){
       var p = {}; p[col + '/' + id] = null;
       if(col === 'veiculos') p['posicoes/' + id] = null;
@@ -253,7 +254,7 @@ function exportar(key){
     return;
   }
   var map = {abastecimentos:c.ab, manutencoes:vals(DB.manutencoes).filter(function(m){ return vOk(m.veiculoId) && (m.status === 'Agendada' || inP(m.data)); }), pedagios:c.pd, viagens:c.vg,
-    visitas:vals(DB.visitas).filter(function(v){ return inP(v.chegada); }), leituras:vals(DB.leituras).filter(function(l){ return vOk(l.veiculoId) && inP(l.data); }), posicoes:vals(DB.posicoes), postos:vals(DB.postos), veiculos:vals(DB.veiculos), motoristas:vals(DB.motoristas)};
+    visitas:visitasCliente().filter(function(v){ return inP(v.chegada); }), leituras:vals(DB.leituras).filter(function(l){ return vOk(l.veiculoId) && inP(l.data); }), posicoes:vals(DB.posicoes), postos:vals(DB.postos), veiculos:vals(DB.veiculos), motoristas:vals(DB.motoristas)};
   xlsxDownload('frota_' + key, [{nome:key, rows:rowsOf(key, map[key] || [])}]);
 }
 function baixarModelo(col){
@@ -384,3 +385,13 @@ function rastreadorAgora(vid){ var po = (DB.posicoes || {})[vid]; return po && p
 
 function ehMensal(a){ return /^mensal/i.test(String(a && a.tipo || '')); }
 function fimDoMes(s){ s = String(s).slice(0, 10); var y = +s.slice(0, 4), m = +s.slice(5, 7); if(!y || !m) return s; return y + '-' + String(m).padStart(2, '0') + '-' + String(new Date(y, m, 0).getDate()).padStart(2, '0'); }
+
+// Excluir posto leva junto as visitas dele
+function excluirPosto(id, r){
+  var p = {}, n = 0;
+  Object.keys(DB.visitas || {}).forEach(function(k){ if(DB.visitas[k].postoId === id){ p['visitas/' + k] = null; n++; } });
+  p['postos/' + id] = null;
+  confirmBox('Excluir posto', 'Excluir <b>' + esc(r.nome || '') + '</b>' + (n ? ' e as ' + n + ' visitas dele' : '') + '?' + (r.refId ? '<br><br>Ele também precisa ser apagado na AgileSat, senão volta na próxima atualização.' : '') + '<br>Não dá para desfazer.', 'Excluir', function(){
+    return save(p, 'Excluiu posto de trabalho', (r.nome || '') + (n ? ' + ' + n + ' visitas' : '')).then(function(){ toast('Posto excluído.'); });
+  });
+}

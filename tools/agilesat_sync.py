@@ -224,6 +224,20 @@ class Firebase:
 VISITA_MIN = 3   # minutos mínimos dentro da cerca para contar como visita (evita passagens)
 
 
+def tipo_posto(p):
+    """Só postos do tipo Cliente geram visitas. Sem tipo definido, deduz pelo nome."""
+    if p.get("tipo"):
+        return p["tipo"]
+    n = norm_txt(p.get("nome")).upper()
+    if n.startswith(("ESCRITORIO", "BASE ")):
+        return "Escritório / base"
+    if n.startswith(("RESIDENCIA", "CASA ")):
+        return "Residência"
+    if n.startswith("PEDAGIO"):
+        return "Outro"
+    return "Cliente"
+
+
 def detectar_visitas(pts_por_veic, postos, visitas):
     """Posições seguidas dentro do raio de um posto viram uma visita (chegada = 1ª, saída = última).
     A chave é fixa (veículo + posto + chegada): execuções seguintes só atualizam a saída."""
@@ -237,7 +251,7 @@ def detectar_visitas(pts_por_veic, postos, visitas):
     novas = {}
     for (vid, rid, motorista), pts in pts_por_veic.items():
         for pid, p in (postos or {}).items():
-            if not isinstance(p, dict) or p.get("lat") in (None, ""):
+            if not isinstance(p, dict) or p.get("lat") in (None, "") or tipo_posto(p) != "Cliente":
                 continue
             raio = num(p.get("raio"), RAIO_PADRAO) or RAIO_PADRAO
             ini = fim = None
@@ -381,6 +395,7 @@ def sincronizar(api, fb, horas, teste=False):
         cidade = corrige_texto(r.get("ras_ref_cidade"))
         novo = {"nome": nome, "endereco": cidade.title() + (" - " + r.get("ras_ref_uf") if r.get("ras_ref_uf") else ""),
                 "lat": lat, "lng": lng, "raio": RAIO_PADRAO, "freqSemana": 0, "refId": ref_id, "origem": "AgileSat"}
+        novo["tipo"] = tipo_posto(novo)
         paths[f"postos/{pid}"] = novo
         postos[pid] = novo
         cont["postos"] += 1

@@ -121,7 +121,7 @@ function placaDe(id){ var v = DB.veiculos[id]; return v ? v.placa : '—'; }
 function postoDe(id){ return DB.postos[id] || null; }
 function weeksInP(){
   var r = range(), st = r[0];
-  if(F.period === 'tudo'){ var ds = vals(DB.visitas).map(function(v){ return toDate(v.chegada); }).filter(Boolean); st = ds.length ? new Date(Math.min.apply(null, ds)) : new Date(); }
+  if(F.period === 'tudo'){ var ds = visitasCliente().map(function(v){ return toDate(v.chegada); }).filter(Boolean); st = ds.length ? new Date(Math.min.apply(null, ds)) : new Date(); }
   return Math.max(1/7, (r[1] - st) / (7 * 864e5));
 }
 
@@ -233,9 +233,9 @@ function combEstimadoMes(vid, k){
 function aderencia(){
   var w = weeksInP();
   return vals(DB.postos).sort(function(a, b){ return String(a.nome).localeCompare(String(b.nome)); }).map(function(p){
-    var vis = vals(DB.visitas).filter(function(v){ return v.postoId === p._id && inP(v.chegada) && (!F.veic || v.veiculoId === F.veic); });
+    var vis = visitasCliente().filter(function(v){ return v.postoId === p._id && inP(v.chegada) && (!F.veic || v.veiculoId === F.veic); });
     var esperado = num(p.freqSemana) * w;
-    var ult = vals(DB.visitas).filter(function(v){ return v.postoId === p._id; }).map(function(v){ return v.chegada; }).sort().pop();
+    var ult = visitasCliente().filter(function(v){ return v.postoId === p._id; }).map(function(v){ return v.chegada; }).sort().pop();
     var perm = vis.map(function(v){ var a = toDate(v.chegada), b = toDate(v.saida); return a && b ? (b - a) / 6e4 : null; }).filter(function(x){ return x != null && x >= 0; });
     return {p:p, n:vis.length, esperado:esperado, pct:esperado ? Math.min(100, vis.length / esperado * 100) : null, ult:ult, perm:perm.length ? perm.reduce(function(s, x){ return s + x; }, 0) / perm.length : null};
   });
@@ -630,7 +630,7 @@ VIEWS.pedagios = function(){
 
 VIEWS.visitas = function(){
   var ad = aderencia();
-  var vis = vals(DB.visitas).filter(function(v){ return inP(v.chegada) && (!F.veic || v.veiculoId === F.veic); }).sort(function(a, b){ return String(b.chegada).localeCompare(String(a.chegada)); });
+  var vis = visitasCliente().filter(function(v){ return inP(v.chegada) && (!F.veic || v.veiculoId === F.veic); }).sort(function(a, b){ return String(b.chegada).localeCompare(String(a.chegada)); });
   var tv = ad.reduce(function(s, a){ return s + a.n; }, 0), te = ad.reduce(function(s, a){ return s + a.esperado; }, 0);
   var auto = vis.filter(function(v){ return /autom/i.test(v.fonte || ''); }).length;
   var html = '<div class="stats five">' +
@@ -762,7 +762,7 @@ function gerarPDF(){
     ], rows, true);
   var dentro = function(col, campo){ return vals(DB[col]).filter(function(x){ return vOk(x.veiculoId) && inP(x[campo]); }).sort(function(a, b){ return String(a[campo]) < String(b[campo]) ? -1 : 1; }); };
   var ab = dentro('abastecimentos', 'data'), mn = dentro('manutencoes', 'data').filter(function(m){ return m.status !== 'Agendada'; }), pd = dentro('pedagios', 'data');
-  var vis = dentro('visitas', 'chegada');
+  var vis = dentro('visitas', 'chegada').filter(function(v){ return ehCliente(DB.postos[v.postoId]); });
   if(ab.length) html += '<h2>Abastecimentos</h2>' + tb([{l:'Data', f:function(x){ return fmtD(x.data); }}, {l:'Veículo', f:function(x){ return esc(placaDe(x.veiculoId)); }}, {l:'Posto', f:function(x){ return esc(x.posto || ''); }}, {l:'Litros', n:1, f:function(x){ return fmtN(x.litros, 1); }}, {l:'KM', n:1, f:function(x){ return x.km ? fmtN(x.km) : '—'; }}, {l:'Valor', n:1, f:function(x){ return fmtR(x.valor); }, t:function(){ return fmtR(ab.reduce(function(t, x){ return t + num(x.valor); }, 0)); }}], ab, true);
   if(mn.length) html += '<h2>Manutenções</h2>' + tb([{l:'Data', f:function(x){ return fmtD(x.data); }}, {l:'Veículo', f:function(x){ return esc(placaDe(x.veiculoId)); }}, {l:'Serviço', f:function(x){ return esc(x.servico || ''); }}, {l:'Oficina', f:function(x){ return esc(x.oficina || ''); }}, {l:'KM', n:1, f:function(x){ return x.km ? fmtN(x.km) : '—'; }}, {l:'Custo', n:1, f:function(x){ return fmtR(x.custo); }, t:function(){ return fmtR(mn.reduce(function(t, x){ return t + num(x.custo); }, 0)); }}], mn, true);
   if(pd.length) html += '<h2>Pedágios</h2>' + tb([{l:'Data', f:function(x){ return fmtD(x.data); }}, {l:'Veículo', f:function(x){ return esc(placaDe(x.veiculoId)); }}, {l:'Praça', f:function(x){ return esc(x.praca || x.local || ''); }}, {l:'Valor', n:1, f:function(x){ return fmtR(x.valor); }, t:function(){ return fmtR(pd.reduce(function(t, x){ return t + num(x.valor); }, 0)); }}], pd, true);
@@ -784,3 +784,16 @@ function gerarPDF(){
     '<script>window.onload=function(){setTimeout(function(){window.print()},400)}<\/script></body></html>');
   w.document.close();
 }
+
+// postos: só "Cliente" gera e mostra visitas (escritório, residência etc. ficam de fora)
+function tipoPosto(p){
+  if(!p) return '';
+  if(p.tipo) return p.tipo;
+  var n = String(p.nome || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+  if(/^ESCRITORIO|^BASE /.test(n)) return 'Escritório / base';
+  if(/^RESIDENCIA|^CASA /.test(n)) return 'Residência';
+  if(/^PEDAGIO/.test(n)) return 'Outro';
+  return 'Cliente';
+}
+function ehCliente(p){ return !!p && tipoPosto(p) === 'Cliente'; }
+function visitasCliente(){ return vals(DB.visitas).filter(function(v){ return ehCliente(DB.postos[v.postoId]); }); }
