@@ -791,7 +791,7 @@ function tipoPosto(p){
   if(p.tipo) return p.tipo;
   var n = String(p.nome || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
   if(/^ESCRITORIO|^BASE /.test(n)) return 'Escritório / base';
-  if(/^RESIDENCIA|^CASA /.test(n)) return 'Residência';
+  if(/^RESIDENCIA/.test(n)) return 'Residência';
   if(/^PEDAGIO/.test(n)) return 'Outro';
   return 'Cliente';
 }

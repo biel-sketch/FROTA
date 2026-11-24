@@ -231,7 +231,7 @@ def tipo_posto(p):
     n = norm_txt(p.get("nome")).upper()
     if n.startswith(("ESCRITORIO", "BASE ")):
         return "Escritório / base"
-    if n.startswith(("RESIDENCIA", "CASA ")):
+    if n.startswith("RESIDENCIA"):
         return "Residência"
     if n.startswith("PEDAGIO"):
         return "Outro"
