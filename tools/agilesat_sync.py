@@ -238,7 +238,7 @@ def tipo_posto(p):
     return "Cliente"
 
 
-def detectar_visitas(pts_por_veic, postos, visitas):
+def detectar_visitas(pts_por_veic, postos, visitas, visita_max_h=8):
     """Posições seguidas dentro do raio de um posto viram uma visita (chegada = 1ª, saída = última).
     A chave é fixa (veículo + posto + chegada): execuções seguintes só atualizam a saída."""
     manuais = []
@@ -263,8 +263,9 @@ def detectar_visitas(pts_por_veic, postos, visitas):
         return melhor[0] if melhor else None
 
     def fecha(vid, rid, motorista, pid, ini, fim):
-        # ficou de um dia para o outro = carro pernoitando/guardado ali, não é visita
-        if ini["t"][:10] != fim["t"][:10]:
+        # visita pode atravessar a meia-noite (turno da noite), mas permanência longa
+        # é carro guardado/pernoitando ali, não visita
+        if (datetime.fromisoformat(fim["t"]) - datetime.fromisoformat(ini["t"])).total_seconds() / 3600 > visita_max_h:
             return
         dur = (datetime.fromisoformat(fim["t"]) - datetime.fromisoformat(ini["t"])).total_seconds() / 60
         ch = datetime.fromisoformat(ini["t"])
@@ -429,7 +430,8 @@ def sincronizar(api, fb, horas, teste=False):
         cont["mot"] += 1
 
     # --- visitas
-    visitas = detectar_visitas(pts_por_veic, postos, fb.get("visitas") if fb else {})
+    visitas = detectar_visitas(pts_por_veic, postos, fb.get("visitas") if fb else {},
+                               num((fb.get("config/agilesat") or {}).get("visitaMaxHoras") if fb else None, 8) or 8)
     for k, v in visitas.items():
         paths[f"visitas/{k}"] = v
 

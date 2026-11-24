@@ -31,6 +31,7 @@ VIEWS.integracao = function(){
     '<div class="cfg-card"><h3>Ajustes da sincronização</h3><p>API: <code>ws.fulltrack2.com</code> (RESTrack). Salvo no Firebase, sem senhas.' + (ed ? '' : ' Só administradores alteram.') + '</p>' +
       '<form id="ag-form"><div class="modal-grid">' +
         '<div class="modal-field"><label>Horas de histórico por execução (mín. 24)</label><input name="horas" type="number" value="'+esc(ag.horas || 24)+'"'+dis+'></div>' +
+        '<div class="modal-field"><label>Tempo máximo de uma visita (horas)</label><input name="visitaMaxHoras" type="number" step="0.5" value="'+esc(ag.visitaMaxHoras || 8)+'"'+dis+'><div class="hint">Visita pode passar da meia-noite (turno da noite). Mais tempo que isso parado no posto conta como carro guardado, não visita.</div></div>' +
         '<div class="modal-field"><label>Limite de velocidade p/ alerta (km/h)</label><input name="limiteVel" type="number" value="'+esc(cfg('limiteVel', 110))+'"'+dis+'></div>' +
       '</div>' + (ed ? '<div class="modal-actions" style="justify-content:flex-start"><button class="btn btn-primary" type="submit">Salvar</button></div>' : '') + '</form>' +
     '</div></div>' +
@@ -42,7 +43,7 @@ function bindIntegracao(){
   var f = $('#ag-form');
   if(f && can('admin')) f.addEventListener('submit', function(e){
     e.preventDefault(); var el = this.elements;
-    var ag = {horas:Math.max(24, num(el.horas.value) || 24)};
+    var ag = {horas:Math.max(24, num(el.horas.value) || 24), visitaMaxHoras:num(el.visitaMaxHoras.value) || 8};
     save({'config/agilesat': ag, 'config/limiteVel': num(el.limiteVel.value) || 110}, 'Alterou a configuração da AgileSat', ag.horas + ' h').then(function(){ toast('Configuração salva.'); });
   });
   var d = $('#ag-drop'); if(!d) return;
