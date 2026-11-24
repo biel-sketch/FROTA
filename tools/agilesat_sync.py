@@ -249,26 +249,38 @@ def detectar_visitas(pts_por_veic, postos, visitas):
             except ValueError:
                 pass
     novas = {}
+    cercas = [(pid, num(p["lat"]), num(p["lng"]), num(p.get("raio"), RAIO_PADRAO) or RAIO_PADRAO)
+              for pid, p in (postos or {}).items()
+              if isinstance(p, dict) and p.get("lat") not in (None, "") and tipo_posto(p) == "Cliente"]
+
+    def posto_do_ponto(q):
+        # cercas sobrepostas: fica com o posto mais perto do ponto
+        melhor = None
+        for pid, la, ln, raio in cercas:
+            d = haversine_km(q["lat"], q["lng"], la, ln) * 1000
+            if d <= raio and (melhor is None or d < melhor[1]):
+                melhor = (pid, d)
+        return melhor[0] if melhor else None
+
+    def fecha(vid, rid, motorista, pid, ini, fim):
+        dur = (datetime.fromisoformat(fim["t"]) - datetime.fromisoformat(ini["t"])).total_seconds() / 60
+        ch = datetime.fromisoformat(ini["t"])
+        manual = any(a == pid and b == vid and abs((c - ch).total_seconds()) < 1800 for a, b, c in manuais)
+        if dur >= VISITA_MIN and not manual:
+            k = re.sub(r"[.#$\[\]/]", "_", f"ag_{rid}_{pid}_{ini['t']}")
+            novas[k] = {"postoId": pid, "veiculoId": vid, "motorista": motorista, "chegada": ini["t"],
+                        "saida": fim["t"], "fonte": "Automática (rastreador)", "obs": "Detectada pela cerca do posto"}
+
     for (vid, rid, motorista), pts in pts_por_veic.items():
-        for pid, p in (postos or {}).items():
-            if not isinstance(p, dict) or p.get("lat") in (None, "") or tipo_posto(p) != "Cliente":
+        atual = ini = fim = None
+        for q in pts + [None]:
+            pid = posto_do_ponto(q) if q is not None else None
+            if pid is not None and pid == atual:
+                fim = q
                 continue
-            raio = num(p.get("raio"), RAIO_PADRAO) or RAIO_PADRAO
-            ini = fim = None
-            for q in pts + [None]:
-                if q is not None and haversine_km(q["lat"], q["lng"], num(p["lat"]), num(p["lng"])) * 1000 <= raio:
-                    ini = ini or q
-                    fim = q
-                    continue
-                if ini:
-                    dur = (datetime.fromisoformat(fim["t"]) - datetime.fromisoformat(ini["t"])).total_seconds() / 60
-                    ch = datetime.fromisoformat(ini["t"])
-                    manual = any(a == pid and b == vid and abs((c - ch).total_seconds()) < 1800 for a, b, c in manuais)
-                    if dur >= VISITA_MIN and not manual:
-                        k = re.sub(r"[.#$\[\]/]", "_", f"ag_{rid}_{pid}_{ini['t']}")
-                        novas[k] = {"postoId": pid, "veiculoId": vid, "motorista": motorista, "chegada": ini["t"],
-                                    "saida": fim["t"], "fonte": "Automática (rastreador)", "obs": "Detectada pela cerca do posto"}
-                ini = fim = None
+            if atual is not None:
+                fecha(vid, rid, motorista, atual, ini, fim)
+            atual, ini, fim = (pid, q, q) if pid is not None else (None, None, None)
     return novas
 
 
