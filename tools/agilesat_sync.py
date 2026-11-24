@@ -263,6 +263,9 @@ def detectar_visitas(pts_por_veic, postos, visitas):
         return melhor[0] if melhor else None
 
     def fecha(vid, rid, motorista, pid, ini, fim):
+        # ficou de um dia para o outro = carro pernoitando/guardado ali, não é visita
+        if ini["t"][:10] != fim["t"][:10]:
+            return
         dur = (datetime.fromisoformat(fim["t"]) - datetime.fromisoformat(ini["t"])).total_seconds() / 60
         ch = datetime.fromisoformat(ini["t"])
         manual = any(a == pid and b == vid and abs((c - ch).total_seconds()) < 1800 for a, b, c in manuais)
