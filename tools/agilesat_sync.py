@@ -251,7 +251,11 @@ def detectar_visitas(pts_por_veic, postos, visitas, visita_max_h=8):
     novas = {}
     cercas = [(pid, num(p["lat"]), num(p["lng"]), num(p.get("raio"), RAIO_PADRAO) or RAIO_PADRAO)
               for pid, p in (postos or {}).items()
-              if isinstance(p, dict) and p.get("lat") not in (None, "") and tipo_posto(p) == "Cliente"]
+              if isinstance(p, dict) and p.get("lat") not in (None, "")]
+    cliente = {pid for pid, p in (postos or {}).items() if isinstance(p, dict) and tipo_posto(p) == "Cliente"}
+    # permanências já gravadas (para emendar uma estadia que começou antes da janela consultada)
+    gravadas = [(k, v) for k, v in (visitas or {}).items()
+                if isinstance(v, dict) and str(v.get("fonte", "")).startswith("Autom")]
 
     def posto_do_ponto(q):
         # cercas sobrepostas: fica com o posto mais perto do ponto
@@ -262,18 +266,25 @@ def detectar_visitas(pts_por_veic, postos, visitas, visita_max_h=8):
                 melhor = (pid, d)
         return melhor[0] if melhor else None
 
-    def fecha(vid, rid, motorista, pid, ini, fim):
-        # visita pode atravessar a meia-noite (turno da noite), mas permanência longa
-        # é carro guardado/pernoitando ali, não visita
-        if (datetime.fromisoformat(fim["t"]) - datetime.fromisoformat(ini["t"])).total_seconds() / 3600 > visita_max_h:
+    def fecha(vid, rid, motorista, pid, ini, fim, primeiro):
+        chave = None
+        if primeiro:  # a estadia já vinha de antes da janela: continua o registro anterior
+            for k, v in gravadas:
+                if v.get("veiculoId") == vid and v.get("postoId") == pid and str(v.get("saida", "")) >= ini["t"][:16]:
+                    chave, ini = k, {"t": v["chegada"]}
+                    break
+        # cliente: visita pode atravessar a meia-noite (turno da noite), mas permanência longa
+        # é carro guardado ali, não visita. Residência/base: registra a permanência inteira.
+        if pid in cliente and (datetime.fromisoformat(fim["t"]) - datetime.fromisoformat(ini["t"])).total_seconds() / 3600 > visita_max_h:
             return
         dur = (datetime.fromisoformat(fim["t"]) - datetime.fromisoformat(ini["t"])).total_seconds() / 60
         ch = datetime.fromisoformat(ini["t"])
         manual = any(a == pid and b == vid and abs((c - ch).total_seconds()) < 1800 for a, b, c in manuais)
         if dur >= VISITA_MIN and not manual:
-            k = re.sub(r"[.#$\[\]/]", "_", f"ag_{rid}_{pid}_{ini['t']}")
+            k = chave or re.sub(r"[.#$\[\]/]", "_", f"ag_{rid}_{pid}_{ini['t']}")
             novas[k] = {"postoId": pid, "veiculoId": vid, "motorista": motorista, "chegada": ini["t"],
-                        "saida": fim["t"], "fonte": "Automática (rastreador)", "obs": "Detectada pela cerca do posto"}
+                        "saida": fim["t"], "fonte": "Automática (rastreador)", "obs": "Detectada pela cerca do posto",
+                        "tipoPosto": "Cliente" if pid in cliente else "Permanência"}
 
     for (vid, rid, motorista), pts in pts_por_veic.items():
         atual = ini = fim = None
@@ -283,7 +294,7 @@ def detectar_visitas(pts_por_veic, postos, visitas, visita_max_h=8):
                 fim = q
                 continue
             if atual is not None:
-                fecha(vid, rid, motorista, atual, ini, fim)
+                fecha(vid, rid, motorista, atual, ini, fim, ini is pts[0])
             atual, ini, fim = (pid, q, q) if pid is not None else (None, None, None)
     return novas
 

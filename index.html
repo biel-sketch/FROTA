@@ -422,7 +422,7 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
         <span class="nav-label">Sair</span>
       </button>
-      <div style="text-align:center;font-size:9px;color:var(--text-faint);margin-top:8px;opacity:0.6;">build 2026-11-24-0843</div>
+      <div style="text-align:center;font-size:9px;color:var(--text-faint);margin-top:8px;opacity:0.6;">build 2026-11-25-1015</div>
     </div>
   </aside>
 
@@ -705,6 +705,7 @@ var MODULES = [
   {id:'pedagios', label:'Pedágios', subs:[{id:'pedagios', label:'Pedágios', view:'pedagios', filtros:true}]},
   {id:'visitas', label:'Visitas a postos', subs:[
     {id:'visitas', label:'Visitas', view:'visitas', filtros:true},
+    {id:'permanencias', label:'Residências e base', view:'permanencias', filtros:true},
     {id:'postos', label:'Postos de trabalho', view:'postos', filtros:true}]},
   {id:'relatorios', label:'Relatórios', subs:[{id:'custos', label:'Custos da frota', view:'relatorios', filtros:true}]},
   {id:'cadastros', label:'Cadastros', subs:[
@@ -921,7 +922,7 @@ function combEstimadoMes(vid, k){
 
 function aderencia(){
   var w = weeksInP();
-  return vals(DB.postos).sort(function(a, b){ return String(a.nome).localeCompare(String(b.nome)); }).map(function(p){
+  return vals(DB.postos).filter(ehCliente).sort(function(a, b){ return String(a.nome).localeCompare(String(b.nome)); }).map(function(p){
     var vis = visitasCliente().filter(function(v){ return v.postoId === p._id && inP(v.chegada) && (!F.veic || v.veiculoId === F.veic); });
     var esperado = num(p.freqSemana) * w;
     var ult = visitasCliente().filter(function(v){ return v.postoId === p._id; }).map(function(v){ return v.chegada; }).sort().pop();
@@ -1325,7 +1326,7 @@ VIEWS.visitas = function(){
   var html = '<div class="stats five">' +
       stat('Visitas realizadas', tv, auto + ' detectadas pelo rastreador') + stat('Esperadas', fmtN(te), 'pela frequência de cada posto') +
       stat('Aderência', te ? fmtN(Math.min(100, tv / te * 100)) + '%' : '—', '', te && tv / te < 0.8 ? 'amber' : 'teal') +
-      stat('Postos', vals(DB.postos).length) + stat('Postos sem visita', ad.filter(function(a){ return a.n === 0; }).length, 'no período', 'red') +
+      stat('Postos de cliente', vals(DB.postos).filter(ehCliente).length) + stat('Postos sem visita', ad.filter(function(a){ return a.n === 0; }).length, 'no período', 'red') +
     '</div>' +
     '<div class="perm-note" style="background:var(--teal-soft);color:var(--teal)">Detecção automática: o painel cruza o trajeto GPS de cada viagem com a cerca (raio) dos postos e registra chegada e saída.' + (can('lancar') ? ' <span class="spacer" style="flex:1"></span><button class="btn btn-sm" data-act="detectar">Detectar visitas pelas rotas</button>' : '') + '</div>' +
     panel('Aderência por posto', '<div class="legend"><span><i class="c-teal"></i>Realizadas</span><span><i class="c-blue"></i>Esperadas</span></div>' + (ad.length ? '<div class="bars">' + ad.map(function(a){
@@ -1338,10 +1339,31 @@ VIEWS.visitas = function(){
       {l:'Posto', f:function(v){ var p = postoDe(v.postoId); return esc(p ? p.nome : '—') + (p && p.cliente ? '<span class="sub">' + esc(p.cliente) + '</span>' : ''); }},
       {l:'Veículo', f:function(v){ return esc(placaDe(v.veiculoId)); }},
       {l:'Responsável', k:'motorista'},
-      {l:'Permanência', n:1, f:function(v){ var a = toDate(v.chegada), b = toDate(v.saida); return a && b ? fmtN((b - a) / 6e4) + ' min' : '—'; }},
+      {l:'Permanência', n:1, f:function(v){ var a = toDate(v.chegada), b = toDate(v.saida); return a && b && b > a ? fmtDur((b - a) / 6e4) : '—'; }},
       {l:'Fonte', f:function(v){ return /autom/i.test(v.fonte || '') ? pill('teal', 'Rastreador') : pill('gray', 'Manual'); }}
     ], vis, {acts:function(v){ return acts('visitas', v._id); }}));
   return {html:html, actions: exportBtn('visitas') + newBtn('visitas', 'Visita manual')};
+};
+
+function fmtDur(min){ min = Math.round(min); if(min < 60) return min + ' min'; var h = Math.floor(min / 60), m = min % 60; return h + 'h' + (m ? String(m).padStart(2, '0') : ''); }
+VIEWS.permanencias = function(){
+  var ini = range()[0], fim = range()[1];
+  var vis = vals(DB.visitas).filter(function(v){ var p = DB.postos[v.postoId]; if(!p || ehCliente(p)) return false;
+      var a = toDate(v.chegada), b = toDate(v.saida) || a; return a && b >= ini && a <= fim && (!F.veic || v.veiculoId === F.veic); })
+    .sort(function(a, b){ return String(b.chegada).localeCompare(String(a.chegada)); });
+  var dur = function(v){ var a = toDate(v.chegada), b = toDate(v.saida); return a && b && b > a ? (b - a) / 6e4 : 0; };
+  var tot = vis.reduce(function(t, v){ return t + dur(v); }, 0);
+  var html = '<div class="stats three">' + stat('Permanências', vis.length, 'residências, escritório e outros') + stat('Tempo total', fmtDur(tot)) +
+      stat('Postos', vals(DB.postos).filter(function(p){ return !ehCliente(p); }).length, 'que não são cliente') + '</div>' +
+    panel('Permanências', table([
+      {l:'Entrada', f:function(v){ return '<span class="mono">' + fmtDH(v.chegada) + '</span>'; }},
+      {l:'Saída', f:function(v){ return '<span class="mono">' + fmtDH(v.saida) + '</span>'; }},
+      {l:'Local', f:function(v){ var p = postoDe(v.postoId); return esc(p ? p.nome : '—') + '<span class="sub">' + esc(tipoPosto(p)) + '</span>'; }},
+      {l:'Veículo', f:function(v){ return esc(placaDe(v.veiculoId)); }},
+      {l:'Responsável', k:'motorista'},
+      {l:'Permanência', n:1, f:function(v){ var d = dur(v); return d ? fmtDur(d) : '—'; }}
+    ], vis, {acts:function(v){ return acts('visitas', v._id); }}), '', 'não contam como visita; servem para ver onde o carro ficou');
+  return {html:html, actions: ''};
 };
 
 VIEWS.postos = function(){
