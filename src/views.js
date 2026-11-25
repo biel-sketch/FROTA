@@ -639,7 +639,7 @@ VIEWS.visitas = function(){
       stat('Aderência', te ? fmtN(Math.min(100, tv / te * 100)) + '%' : '—', '', te && tv / te < 0.8 ? 'amber' : 'teal') +
       stat('Postos de cliente', vals(DB.postos).filter(ehCliente).length) + stat('Postos sem visita', ad.filter(function(a){ return a.n === 0; }).length, 'no período', 'red') +
     '</div>' +
-    '<div class="perm-note" style="background:var(--teal-soft);color:var(--teal)">Detecção automática: o painel cruza o trajeto GPS de cada viagem com a cerca (raio) dos postos e registra chegada e saída.' + (can('lancar') ? ' <span class="spacer" style="flex:1"></span><button class="btn btn-sm" data-act="detectar">Detectar visitas pelas rotas</button>' : '') + '</div>' +
+    '<div class="perm-note" style="background:var(--teal-soft);color:var(--teal)">Visitas detectadas automaticamente a cada atualização do rastreador (8h, 12h e 17h), pela cerca dos postos do tipo Cliente.</div>' +
     panel('Aderência por posto', '<div class="legend"><span><i class="c-teal"></i>Realizadas</span><span><i class="c-blue"></i>Esperadas</span></div>' + (ad.length ? '<div class="bars">' + ad.map(function(a){
       var max = Math.max(a.n, a.esperado, 1);
       return '<div class="bar-row duo"><span class="bar-label" title="'+esc(a.p.nome)+'">'+esc(a.p.nome)+'</span><div class="bar-pair"><div class="bar-track"><div class="bar-fill '+(a.pct != null && a.pct < 50 ? 'red' : '')+'" style="width:'+(a.n/max*100).toFixed(1)+'%"></div></div><div class="bar-track"><div class="bar-fill blue" style="width:'+(a.esperado/max*100).toFixed(1)+'%"></div></div></div><span class="bar-val">'+a.n+' / '+fmtN(a.esperado)+'</span></div>';

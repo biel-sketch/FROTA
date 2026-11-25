@@ -193,7 +193,6 @@ function onAction(e){
     return;
   }
   if(a === 'exportar'){ exportar(t.dataset.key); return; }
-  if(a === 'detectar'){ detectarVisitas(false); return; }
   if(a === 'importar'){ abrirImportacao(t.dataset.col); return; }
   if(a === 'modelo'){ baixarModelo(t.dataset.col); return; }
   if(a === 'demo-carregar'){ carregarDemo(); return; }
@@ -356,7 +355,7 @@ function visitasDetectadas(){
   return novos;
 }
 function detectarVisitas(silent){
-  var novos = visitasDetectadas();
+  var novos = visitasDetectadas().filter(function(v){ return ehCliente(DB.postos[v.postoId]); });
   if(!novos.length){ if(!silent) toast('Nenhuma visita nova encontrada nas rotas.'); return Promise.resolve(0); }
   var p = {}; novos.forEach(function(v){ v.atualizadoEm = nowTs(); p['visitas/' + store.key()] = v; });
   return save(p, 'Detectou visitas pelas rotas', novos.length + ' visita(s)').then(function(){ if(!silent) toast(novos.length + ' visita(s) registrada(s).'); return novos.length; });

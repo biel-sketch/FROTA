@@ -422,7 +422,7 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
         <span class="nav-label">Sair</span>
       </button>
-      <div style="text-align:center;font-size:9px;color:var(--text-faint);margin-top:8px;opacity:0.6;">build 2026-11-25-1015</div>
+      <div style="text-align:center;font-size:9px;color:var(--text-faint);margin-top:8px;opacity:0.6;">build 2026-11-25-1019</div>
     </div>
   </aside>
 
@@ -1328,7 +1328,7 @@ VIEWS.visitas = function(){
       stat('Aderência', te ? fmtN(Math.min(100, tv / te * 100)) + '%' : '—', '', te && tv / te < 0.8 ? 'amber' : 'teal') +
       stat('Postos de cliente', vals(DB.postos).filter(ehCliente).length) + stat('Postos sem visita', ad.filter(function(a){ return a.n === 0; }).length, 'no período', 'red') +
     '</div>' +
-    '<div class="perm-note" style="background:var(--teal-soft);color:var(--teal)">Detecção automática: o painel cruza o trajeto GPS de cada viagem com a cerca (raio) dos postos e registra chegada e saída.' + (can('lancar') ? ' <span class="spacer" style="flex:1"></span><button class="btn btn-sm" data-act="detectar">Detectar visitas pelas rotas</button>' : '') + '</div>' +
+    '<div class="perm-note" style="background:var(--teal-soft);color:var(--teal)">Visitas detectadas automaticamente a cada atualização do rastreador (8h, 12h e 17h), pela cerca dos postos do tipo Cliente.</div>' +
     panel('Aderência por posto', '<div class="legend"><span><i class="c-teal"></i>Realizadas</span><span><i class="c-blue"></i>Esperadas</span></div>' + (ad.length ? '<div class="bars">' + ad.map(function(a){
       var max = Math.max(a.n, a.esperado, 1);
       return '<div class="bar-row duo"><span class="bar-label" title="'+esc(a.p.nome)+'">'+esc(a.p.nome)+'</span><div class="bar-pair"><div class="bar-track"><div class="bar-fill '+(a.pct != null && a.pct < 50 ? 'red' : '')+'" style="width:'+(a.n/max*100).toFixed(1)+'%"></div></div><div class="bar-track"><div class="bar-fill blue" style="width:'+(a.esperado/max*100).toFixed(1)+'%"></div></div></div><span class="bar-val">'+a.n+' / '+fmtN(a.esperado)+'</span></div>';
@@ -1820,7 +1820,6 @@ function onAction(e){
     return;
   }
   if(a === 'exportar'){ exportar(t.dataset.key); return; }
-  if(a === 'detectar'){ detectarVisitas(false); return; }
   if(a === 'importar'){ abrirImportacao(t.dataset.col); return; }
   if(a === 'modelo'){ baixarModelo(t.dataset.col); return; }
   if(a === 'demo-carregar'){ carregarDemo(); return; }
@@ -1983,7 +1982,7 @@ function visitasDetectadas(){
   return novos;
 }
 function detectarVisitas(silent){
-  var novos = visitasDetectadas();
+  var novos = visitasDetectadas().filter(function(v){ return ehCliente(DB.postos[v.postoId]); });
   if(!novos.length){ if(!silent) toast('Nenhuma visita nova encontrada nas rotas.'); return Promise.resolve(0); }
   var p = {}; novos.forEach(function(v){ v.atualizadoEm = nowTs(); p['visitas/' + store.key()] = v; });
   return save(p, 'Detectou visitas pelas rotas', novos.length + ' visita(s)').then(function(){ if(!silent) toast(novos.length + ' visita(s) registrada(s).'); return novos.length; });
